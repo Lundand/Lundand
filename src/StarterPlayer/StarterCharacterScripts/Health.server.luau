@@ -1,0 +1,2 @@
+-- An empty script named "Health" replaces Roblox's default health regeneration.
+-- CORE HUNTERS handles regeneration on the server (PlayerService) so classes can change it.
