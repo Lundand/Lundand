@@ -197,6 +197,57 @@ local function roomsDoorX(model: Model, cf: CFrame, W: number, D: number, trapdo
 	return -W / 6
 end
 
+-- Neighbouring roofs at the same height can overlap at the eaves (houses turned round the square, a gable's overhang
+-- past a gap). Where two would, one sits a few hundredths of a stud lower, so their undersides never share a plane.
+-- Returns each building's level (0, 1, 2...); a roof sinks 0.04 studs per level.
+local function roofLevels(): {[string]: number}
+	local roofs = {}
+	for _, entry in ipairs(Layout.blocks) do
+		if entry.door ~= nil and LANDMARKS[entry.use] == nil and entry.kind ~= "Tower" then
+			local _, W = Shell.frameOf(entry)
+			local roof = if entry.template ~= nil then Layout.templates[entry.template].roof elseif W <= 24 then "Gable" else "Eaves"
+			-- eaves overhang the front and back by a stud, a gable's slopes the sides by 0.6
+			local alongW, alongD = if roof == "Eaves" then 0 else 1.2, if roof == "Eaves" then 2 else 0
+			local turned = entry.door == "East" or entry.door == "West"
+			local footprint = {
+				center = entry.center,
+				size = if turned then { entry.size[1] + alongD, entry.size[2] + alongW } else { entry.size[1] + alongW, entry.size[2] + alongD },
+				yaw = entry.yaw,
+			}
+			local x0, x1, z0, z1 = LayoutRules.bounds(footprint)
+			table.insert(roofs, { id = entry.id, stories = entry.stories, footprint = footprint, box = { x0, x1, z0, z1 } })
+		end
+	end
+	local levels = {}
+	for index, roof in ipairs(roofs) do
+		local used = {}
+		for other = 1, index - 1 do
+			local o = roofs[other]
+			local a, b = roof.box, o.box
+			if o.stories == roof.stories and a[1] < b[2] and b[1] < a[2] and a[3] < b[4] and b[3] < a[4] and LayoutRules.overlaps(roof.footprint, o.footprint) then
+				used[levels[o.id]] = true
+			end
+		end
+		local level = 0
+		while used[level] do
+			level += 1
+		end
+		levels[roof.id] = level
+	end
+	return levels
+end
+
+local function sinkRoof(model: Model, level: number?)
+	if level == nil or level == 0 then
+		return
+	end
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") and part.Name == "Roof" then
+			part.CFrame = part.CFrame - Vector3.new(0, level * 0.04, 0)
+		end
+	end
+end
+
 -- What a closed building's door is called on its prompt.
 local DOOR_NAMES = { Storefront = "Shop", Warehouse = "Warehouse" }
 
@@ -348,6 +399,7 @@ function CityBuilder.build(options: Options?): Model
 
 	local byDistrict: {[string]: Folder} = {}
 	local blocked = obstacleLookup()
+	local roofLevel = roofLevels()
 	local innByLocation = {}
 	for innId, inn in pairs(Content.world.inns) do
 		innByLocation[inn.locationId] = innId
@@ -418,6 +470,7 @@ function CityBuilder.build(options: Options?): Model
 					warn("[CityBuilder] house model for " .. entry.id .. " has no part named Door")
 				end
 			end
+			sinkRoof(model, roofLevel[entry.id])
 			model:SetAttribute("Access", entry.access or "Npc")
 			model:SetAttribute("Use", entry.use or "Townhouse")
 			if entry.locationId then

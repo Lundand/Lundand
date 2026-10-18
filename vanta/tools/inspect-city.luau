@@ -201,10 +201,14 @@ for _, d in city:GetDescendants() do
 			if LayoutRules.contains(owner, { ahead.X, ahead.Z }) then
 				problem("deed plaque " .. d.Name .. " reads towards the wall")
 			end
+			-- in the facade's plane: glass is set into the wall, windows stand proud of it
 			for _, part in partsNear(d.CFrame.Position) do
-				if (part.Name == "Window" or part.Name == "Glass") and boxesOverlap(d.CFrame, d.Size, part.CFrame, part.Size, -0.05) then
-					problem("deed plaque " .. d.Name .. " hangs over a window")
-					break
+				if part.Name == "Window" or part.Name == "Glass" then
+					local q = d.CFrame:PointToObjectSpace(part.CFrame.Position)
+					if math.abs(q.Z) < 1.2 and math.abs(q.X) < (d.Size.X + part.Size.X) / 2 and math.abs(q.Y) < (d.Size.Y + part.Size.Y) / 2 then
+						problem("deed plaque " .. d.Name .. " hangs over a window")
+						break
+					end
 				end
 			end
 		end
@@ -350,7 +354,8 @@ local function covered(point, a, b)
 		if part ~= a and part ~= b then
 			local q = part.CFrame:PointToObjectSpace(point)
 			local half = part.Size / 2
-			if math.abs(q.X) < half.X - 0.01 and math.abs(q.Y) < half.Y - 0.01 and math.abs(q.Z) < half.Z - 0.01 then
+			-- on the boundary counts: a point where two abutting blocks meet is inside the pair of them
+			if math.abs(q.X) <= half.X + 0.01 and math.abs(q.Y) <= half.Y + 0.01 and math.abs(q.Z) <= half.Z + 0.01 then
 				return true
 			end
 		end
@@ -359,35 +364,65 @@ local function covered(point, a, b)
 end
 
 local flicker = {}
+local function extent(face, axis)
+	return math.abs(face.u:Dot(axis)) * face.hu + math.abs(face.v:Dot(axis)) * face.hv
+end
+local function comparePair(a, b)
+	if a.part == b.part or math.abs(a.d - b.d) >= 0.02 then
+		return
+	end
+	-- overlap of the two rectangles, measured in a's plane
+	local delta = b.centre - a.centre
+	local su, sv = delta:Dot(a.u), delta:Dot(a.v)
+	local u0, u1 = math.max(-a.hu, su - extent(b, a.u)), math.min(a.hu, su + extent(b, a.u))
+	local v0, v1 = math.max(-a.hv, sv - extent(b, a.v)), math.min(a.hv, sv + extent(b, a.v))
+	if u1 - u0 <= 0.05 or v1 - v0 <= 0.05 then
+		return
+	end
+	-- hidden only if the overlap is covered all over: its middle and four points round it, just in front of the faces
+	local mu, mv = (u0 + u1) / 2, (v0 + v1) / 2
+	local qu, qv = (u1 - u0) / 4, (v1 - v0) / 4
+	for _, at in { { 0, 0 }, { -qu, -qv }, { qu, -qv }, { -qu, qv }, { qu, qv } } do
+		local point = a.centre + a.u * (mu + at[1]) + a.v * (mv + at[2]) + a.n * 0.05
+		if not covered(point, a.part, b.part) then
+			local key = a.part.Name .. " / " .. b.part.Name
+			flicker[key] = (flicker[key] or 0) + 1
+			if process.env.FLICKER_DETAIL and (flicker[key] == 1 or process.env.FLICKER_DETAIL == "all") then
+				print(string.format("  %s: normal (%.2f %.2f %.2f) at (%.1f %.1f %.1f) in %s / %s", key, a.n.X, a.n.Y, a.n.Z, a.centre.X, a.centre.Y, a.centre.Z, a.part.Parent.Name, b.part.Parent.Name))
+			end
+			return
+		end
+	end
+end
+-- faces in the same plane are compared when their rectangles share a cell, so a plane every house shares (storey
+-- lines, lintels, eaves) is checked in full without comparing every face with every other
+local PAIR_CELL = 32
 for _, list in buckets do
-	if #list > 1 and #list < 400 then
-		for i = 1, #list do
-			for j = i + 1, #list do
-				local a, b = list[i], list[j]
-				if a.part ~= b.part and math.abs(a.d - b.d) < 0.02 then
-					-- overlap of the two rectangles, measured in a's plane
-					local function extent(face, axis)
-						return math.abs(face.u:Dot(axis)) * face.hu + math.abs(face.v:Dot(axis)) * face.hv
+	if #list > 1 then
+		local cells = {}
+		for index, f in list do
+			local ex = math.abs(f.u.X) * f.hu + math.abs(f.v.X) * f.hv
+			local ey = math.abs(f.u.Y) * f.hu + math.abs(f.v.Y) * f.hv
+			local ez = math.abs(f.u.Z) * f.hu + math.abs(f.v.Z) * f.hv
+			local c = f.centre
+			for i = math.floor((c.X - ex) / PAIR_CELL), math.floor((c.X + ex) / PAIR_CELL) do
+				for j = math.floor((c.Y - ey) / PAIR_CELL), math.floor((c.Y + ey) / PAIR_CELL) do
+					for k = math.floor((c.Z - ez) / PAIR_CELL), math.floor((c.Z + ez) / PAIR_CELL) do
+						local key = i .. ":" .. j .. ":" .. k
+						cells[key] = cells[key] or {}
+						table.insert(cells[key], index)
 					end
-					local delta = b.centre - a.centre
-					local du, dv = math.abs(delta:Dot(a.u)), math.abs(delta:Dot(a.v))
-					local overlapU = a.hu + extent(b, a.u) - du
-					local overlapV = a.hv + extent(b, a.v) - dv
-					local hidden = false
-					if overlapU > 0.05 and overlapV > 0.05 then
-						-- the middle of the overlap, just in front of the faces
-						local su, sv = delta:Dot(a.u), delta:Dot(a.v)
-						local u0, u1 = math.max(-a.hu, su - extent(b, a.u)), math.min(a.hu, su + extent(b, a.u))
-						local v0, v1 = math.max(-a.hv, sv - extent(b, a.v)), math.min(a.hv, sv + extent(b, a.v))
-						local point = a.centre + a.u * ((u0 + u1) / 2) + a.v * ((v0 + v1) / 2) + a.n * 0.05
-						hidden = covered(point, a.part, b.part)
-					end
-					if overlapU > 0.05 and overlapV > 0.05 and not hidden then
-						local key = a.part.Name .. " / " .. b.part.Name
-						flicker[key] = (flicker[key] or 0) + 1
-						if process.env.FLICKER_DETAIL and flicker[key] == 1 then
-							print(string.format("  %s: normal (%.2f %.2f %.2f) at (%.1f %.1f %.1f) in %s / %s", key, a.n.X, a.n.Y, a.n.Z, a.centre.X, a.centre.Y, a.centre.Z, a.part.Parent.Name, b.part.Parent.Name))
-						end
+				end
+			end
+		end
+		local compared = {}
+		for _, members in cells do
+			for x = 1, #members do
+				for y = x + 1, #members do
+					local pairKey = members[x] * 1000000 + members[y]
+					if not compared[pairKey] then
+						compared[pairKey] = true
+						comparePair(list[members[x]], list[members[y]])
 					end
 				end
 			end

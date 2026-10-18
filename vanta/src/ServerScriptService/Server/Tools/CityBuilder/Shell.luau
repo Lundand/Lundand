@@ -180,11 +180,13 @@ function Shell.build(model: Model, cf: CFrame, spec: Spec): BasePart?
 		local rise = W / 2 * pitch
 		paint(f:wedgeAt("Roof", Vector3.new(D, rise, W / 2 + 0.6), CFrame.new(-(W / 2 + 0.6) / 2, top + rise / 2, 0) * CFrame.Angles(0, math.pi / 2, 0), roofColor, palette.roofMaterial), "Roof")
 		paint(f:wedgeAt("Roof", Vector3.new(D, rise, W / 2 + 0.6), CFrame.new((W / 2 + 0.6) / 2, top + rise / 2, 0) * CFrame.Angles(0, -math.pi / 2, 0), roofColor, palette.roofMaterial), "Roof")
-		-- the gable end on the street, in the wall's material, standing just proud of the roof's end
-		local gable = if TIMBERED[spec.style] then palette.plaster[1] else palette.base[1]
-		local gableMaterial = if TIMBERED[spec.style] then M.Plaster else palette.baseMaterial
-		paint(f:wedgeAt("Gable", Vector3.new(0.3, rise, W / 2), CFrame.new(-W / 4, top + rise / 2, D / 2 + 0.15) * CFrame.Angles(0, math.pi / 2, 0), gable, gableMaterial, NO), "Upper")
-		paint(f:wedgeAt("Gable", Vector3.new(0.3, rise, W / 2), CFrame.new(W / 4, top + rise / 2, D / 2 + 0.15) * CFrame.Angles(0, -math.pi / 2, 0), gable, gableMaterial, NO), "Upper")
+		-- the gable end on the street, standing just proud of the roof's end, in the storey below it: the upper
+		-- storeys' plaster or boards, or the ground storey's stone on a one-storey house
+		local role = if N > 1 then "Upper" else "Base"
+		local gable = if N > 1 then palette.plaster[1] else palette.base[1]
+		local gableMaterial = if N > 1 then palette.upperMaterial or M.Plaster else palette.baseMaterial
+		paint(f:wedgeAt("Gable", Vector3.new(0.3, rise, W / 2), CFrame.new(-W / 4, top + rise / 2, D / 2 + 0.15) * CFrame.Angles(0, math.pi / 2, 0), gable, gableMaterial, NO), role)
+		paint(f:wedgeAt("Gable", Vector3.new(0.3, rise, W / 2), CFrame.new(W / 4, top + rise / 2, D / 2 + 0.15) * CFrame.Angles(0, -math.pi / 2, 0), gable, gableMaterial, NO), role)
 		ridge = top + rise
 	else
 		local half = D / 2 + 1
@@ -222,7 +224,7 @@ function Shell.paint(model: Model, style: string, seed: number)
 			local role = part:GetAttribute("Paint")
 			if type(role) == "string" and colors[role] ~= nil then
 				part.Color = colors[role]
-				if not (part.Name == "Chimney" or part.Name == "Gable") then
+				if part.Name ~= "Chimney" then
 					part.Material = materials[role]
 				end
 			end

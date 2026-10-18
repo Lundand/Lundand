@@ -92,7 +92,9 @@ function Outdoors.ground(layout: any, root: Instance, holes: {{number}})
 		terrain:FillBlock(CFrame.new((sea[1] + sea[2]) / 2, (water.level - water.depth) / 2, (sea[3] + sea[4]) / 2), Vector3.new(sea[2] - sea[1], water.level + water.depth, sea[4] - sea[3]), Enum.Material.Water)
 	end)
 	if not filled then
-		local surface = Kit.part(folder, "WaterSurface", Vector3.new(sea[2] - sea[1], 0.4, sea[4] - sea[3]), CFrame.new((sea[1] + sea[2]) / 2, water.level - 0.2, (sea[3] + sea[4]) / 2), rgb(60, 110, 150), M.Glass, { collide = false, query = false, transparency = 0.3, shadow = false })
+		-- (from the quay walls' faces out, so its edge never lies in theirs)
+		local x0 = sea[1] + 0.2
+		local surface = Kit.part(folder, "WaterSurface", Vector3.new(sea[2] - x0, 0.4, sea[4] - sea[3]), CFrame.new((x0 + sea[2]) / 2, water.level - 0.2, (sea[3] + sea[4]) / 2), rgb(60, 110, 150), M.Glass, { collide = false, query = false, transparency = 0.3, shadow = false })
 		surface:SetAttribute("Water", true)
 	end
 	-- the quay wall along the water

@@ -94,7 +94,7 @@ local function ruin(f: Frame, spec: any)
 	if spec.kind == "Cabin" then
 		-- a hunter's cabin, roof fallen in, door gone
 		f:box("CabinFloor", Vector3.new(16, 0.6, 12), x, 0.3, z, rgb(110, 86, 60), M.WoodPlanks)
-		f:box("CabinWall", Vector3.new(15.8, 7, 1), x, 3.5, z - 5.5, wood, M.WoodPlanks)
+		f:box("CabinWall", Vector3.new(15.8, 6.4, 1), x, 3.8, z - 5.5, wood, M.WoodPlanks)
 		f:box("CabinWall", Vector3.new(1, 5, 10), x - 7.4, 2.5, z, wood, M.WoodPlanks)
 		f:box("CabinWall", Vector3.new(1, 3, 5.5), x + 7.4, 1.5, z - 2.25, wood, M.WoodPlanks)
 		f:box("CabinWall", Vector3.new(4.8, 7, 1), x - 5.3, 3.5, z + 5.4, wood, M.WoodPlanks)
