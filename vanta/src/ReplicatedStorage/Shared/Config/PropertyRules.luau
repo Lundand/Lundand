@@ -1,7 +1,8 @@
 --!strict
 -- Property rules (L-28, L-54). Owned buildings are unique (one owner each) and visible to everyone; their
--- interiors are instanced. Inn rooms (L-29) can be rented by any number of players, each getting their own copy. Each player may own one home and one shop. Guild halls belong to
--- a guild, are bought from its treasury, and need the guild to reach a level. Prices are placeholders (O-10).
+-- interiors are instanced. Inn rooms (L-29) can be rented by any number of players, each getting their own copy.
+-- Each player may own one home and one shop. Guild halls belong to a guild, are bought from its treasury, and need
+-- the guild to reach a level. Prices are placeholders (O-10).
 local Table = require(script.Parent.Parent.Util.Table)
 
 return Table.deepFreeze({

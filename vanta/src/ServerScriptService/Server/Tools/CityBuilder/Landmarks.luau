@@ -1,7 +1,7 @@
 --!strict
 -- Hand-shaped landmarks: the square's fountain with the Heart of Realms, the church (spawn and awakening), the
 -- castle (keep with throne hall, Royal Library, curtain walls, towers, gatehouse) and the harbour fish market.
--- Each works in its block's frame, front (door side) towards +z, like House.
+-- Each works in its block's frame, front (door side) towards +z, like Shell.
 local Kit = require(script.Parent.Kit)
 local Furniture = require(script.Parent.Furniture)
 local Layout = require(game:GetService("ServerStorage"):WaitForChild("ServerData").CityLayout)

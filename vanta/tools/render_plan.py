@@ -9,7 +9,7 @@ src = sys.argv[1] if len(sys.argv) > 1 else "build/layout.json"
 out = sys.argv[2] if len(sys.argv) > 2 else "build/master-plan.png"
 d = json.load(open(src))
 S = 2.0  # pixels per stud
-MIN_X, MAX_X, MIN_Z, MAX_Z = -520, 940, -1020, 980
+MIN_X, MAX_X, MIN_Z, MAX_Z = -520, 940, -580, 980
 W, H = int((MAX_X - MIN_X) * S), int((MAX_Z - MIN_Z) * S)
 img = Image.new("RGB", (W, H), (120, 150, 95))
 g = ImageDraw.Draw(img)
@@ -57,12 +57,15 @@ for p in d["piers"]:
     box(392, 392 + p["length"], p["z"] - 4, p["z"] + 4, (120, 90, 60))
 for sh in d["ships"]:
     x, z = sh["center"]; g.rectangle([P(x - sh["beam"] / 2, z - sh["length"] / 2), P(x + sh["beam"] / 2, z + sh["length"] / 2)], fill=(90, 60, 40))
+# public buildings with a real ground floor (CityBuilder.PUBLIC, guild halls aside); every other door leads to an
+# instanced interior
+WALK_IN = ("Inn", "Guild", "Forge", "Apothecary", "CraftGuild", "SlumTavern", "Tavern")
 COL = {"Sale": (90, 140, 210), "Npc": (190, 150, 110), "Public": (220, 190, 70), "Royal": (150, 90, 170), "Guild": (90, 190, 170)}
 for e in d["blocks"]:
     col = COL.get(e.get("access"), (120, 120, 120))
     if e.get("kind") in ("Wall", "Tower", "Gatehouse"):
         col = (100, 100, 105)
-    if e.get("use") in ("Shop", "Smithy", "Tavern"):
+    if e.get("use") in WALK_IN:
         col = (205, 120, 80)
     g.polygon(corners(e), fill=col, outline=(40, 35, 30))
     # door tick
@@ -87,6 +90,8 @@ for gate in d["gates"]:
         box(x - w, x + w, z - t, z + t, (176, 168, 152) if gate.get("kind") != "Sea" else (70, 110, 160))
     else:
         box(x - t, x + t, z - w, z + w, (176, 168, 152) if gate.get("kind") != "Sea" else (70, 110, 160))
+for tw in d.get("wallTowers", []):
+    g.polygon(corners(tw), fill=(70, 70, 75), outline=(40, 35, 30))
 for n in d["npcs"]:
     x, z = n["at"]; g.ellipse([P(x - 2, z - 2), P(x + 2, z + 2)], fill=(230, 60, 60))
 x, z = d["spawn"]["center"]; g.ellipse([P(x - 4, z - 4), P(x + 4, z + 4)], outline=(255, 255, 255), width=2)
