@@ -8,7 +8,8 @@
 -- (its own seeded generator, not Random), so Studio, the server and the offline checks see the same city.
 --
 -- Built by Server.Tools.CityBuilder; checked offline by Server.Domain.LayoutRules (no overlaps, inside the walls,
--- gates on the wall, every door reachable from the gates, stairs fit, every location and property placed once).
+-- gates on the wall, every door reachable from the gates, houses that match their house model, every location and
+-- property placed once).
 -- Entries keep the greybox fields (id, center, size, height, door, locationId, propertyId) and add:
 --   yaw      rotation in degrees (the footprint is size = local width x depth, turned about its centre)
 --   use      what the building is (Townhouse, Shop, Inn, Mansion, Warehouse, ...)
@@ -17,7 +18,8 @@
 --   access   Public, Npc (an NPC's home or business), Sale (a player property), Guild, Royal, Quest
 --   open     sides that face a street or yard
 --   template the house model an ordinary house is built from (TEMPLATES); its interior is instanced. Entries
---            without one (public buildings, shops of note, warehouses) are built in place with a ground-floor room
+--            without one are built in place: public buildings with a ground-floor room you walk into, the rest
+--            (storefronts, warehouses, offices) as closed shells whose door leads to a room sized to the building
 local Table = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared").Util.Table)
 
 local FLOOR_HEIGHT = 12
@@ -95,23 +97,24 @@ local WALL_THICKNESS = 8
 
 -- House models (templates): a few per district, reused for every lot. CityBuilder keeps one copy of each in
 -- ServerStorage.CityAssets.Houses (outside) and ServerStorage.CityAssets.Interiors (the room you enter), so they can
--- be remodelled in Studio and every house built from them follows. w is the facade, d the depth (studs).
+-- be remodelled in Studio and every house built from them follows. w is the facade, d the depth (studs); style is
+-- the district look it is built in (window sizes, roof pitch, timber framing, chimney).
 local TEMPLATES: {[string]: any} = {
-	MarketA = { id = "MarketA", w = 22, d = 24, stories = 3, roof = "Eaves" },
-	MarketB = { id = "MarketB", w = 26, d = 24, stories = 3, roof = "Gable" },
-	MarketC = { id = "MarketC", w = 30, d = 26, stories = 3, roof = "Eaves" },
-	RingHouse = { id = "RingHouse", w = 20, d = 22, stories = 3, roof = "Gable" },
-	TownA = { id = "TownA", w = 22, d = 22, stories = 2, roof = "Eaves" },
-	TownB = { id = "TownB", w = 24, d = 22, stories = 3, roof = "Gable" },
-	TownC = { id = "TownC", w = 28, d = 24, stories = 2, roof = "Eaves" },
-	CraftA = { id = "CraftA", w = 24, d = 24, stories = 2, roof = "Eaves" },
-	CraftB = { id = "CraftB", w = 30, d = 26, stories = 2, roof = "Gable" },
-	HarborA = { id = "HarborA", w = 22, d = 22, stories = 2, roof = "Gable" },
-	HarborB = { id = "HarborB", w = 28, d = 24, stories = 3, roof = "Eaves" },
-	SlumA = { id = "SlumA", w = 16, d = 18, stories = 1, roof = "Eaves" },
-	SlumB = { id = "SlumB", w = 18, d = 18, stories = 2, roof = "Gable" },
-	Mansion = { id = "Mansion", w = 40, d = 30, stories = 3, roof = "Eaves" },
-	Manor = { id = "Manor", w = 34, d = 28, stories = 2, roof = "Eaves" },
+	MarketA = { id = "MarketA", w = 22, d = 24, stories = 3, roof = "Eaves", style = "Market" },
+	MarketB = { id = "MarketB", w = 26, d = 24, stories = 3, roof = "Gable", style = "Market" },
+	MarketC = { id = "MarketC", w = 30, d = 26, stories = 3, roof = "Eaves", style = "Market" },
+	RingHouse = { id = "RingHouse", w = 20, d = 22, stories = 3, roof = "Gable", style = "Market" },
+	TownA = { id = "TownA", w = 22, d = 22, stories = 2, roof = "Eaves", style = "Residential" },
+	TownB = { id = "TownB", w = 24, d = 22, stories = 3, roof = "Gable", style = "Residential" },
+	TownC = { id = "TownC", w = 28, d = 24, stories = 2, roof = "Eaves", style = "Residential" },
+	CraftA = { id = "CraftA", w = 24, d = 24, stories = 2, roof = "Eaves", style = "Craft" },
+	CraftB = { id = "CraftB", w = 30, d = 26, stories = 2, roof = "Gable", style = "Craft" },
+	HarborA = { id = "HarborA", w = 22, d = 22, stories = 2, roof = "Gable", style = "Harbor" },
+	HarborB = { id = "HarborB", w = 28, d = 24, stories = 3, roof = "Eaves", style = "Harbor" },
+	SlumA = { id = "SlumA", w = 16, d = 18, stories = 1, roof = "Eaves", style = "Slum" },
+	SlumB = { id = "SlumB", w = 18, d = 18, stories = 2, roof = "Gable", style = "Slum" },
+	Mansion = { id = "Mansion", w = 40, d = 30, stories = 3, roof = "Eaves", style = "Noble" },
+	Manor = { id = "Manor", w = 34, d = 28, stories = 2, roof = "Eaves", style = "Noble" },
 }
 
 local blocks = {}
@@ -256,9 +259,13 @@ for index, spot in ipairs({ { CASTLE.minX, CASTLE.minZ }, { CASTLE.maxX, CASTLE.
 	reserve(entry)
 end
 
--- Towers along the city walls (square, centred on the wall line), none beside a gate or where the castle's own
--- towers stand. A tower stands 4 studs proud of the wall's inner face; houses keep a further 4 clear so the lane by the
--- wall goes on round it.
+-- stairs up to the wall walk beside each land gate (built by CityBuilder.Outdoors)
+zone("NorthWallStairs", 322, 364, -516, -509, { surface = "None" })
+zone("SouthWallStairs", 24, 66, 309, 316, { surface = "None" })
+
+-- Towers along the city walls (square, centred on the wall line), none beside a gate, on the wall stairs or where the
+-- castle's own towers stand. A tower stands 4 studs proud of the wall's inner face; houses keep a further 4 clear so
+-- the lane by the wall goes on round it.
 local TOWER_SPACING, TOWER_SIZE = 120, 16
 local WALL_TOWERS = {}
 do
@@ -289,9 +296,11 @@ do
 			local key = string.format("%d,%d", math.floor(x), math.floor(z))
 			local half = TOWER_SIZE / 2
 			local tower: any = rect(x - half, x + half, z - half, z + half)
-			for _, other in ipairs(blocks) do
-				if overlaps(tower, other) then
-					skip = true
+			for _, list in ipairs({ blocks, ground }) do
+				for _, other in ipairs(list) do
+					if overlaps(tower, other) then
+						skip = true
+					end
 				end
 			end
 			if not skip and not seen[key] then
@@ -359,9 +368,6 @@ zone("SlumWell", -340, -316, 250, 270, { surface = "Alley" })
 -- Gate yards: open space inside each gate
 zone("SouthGateYard", -40, 40, 286, 300, { surface = "Plaza" })
 zone("NorthGateYard", 280, 320, -512, -490, { surface = "Plaza" })
--- stairs up to the wall walk beside each land gate (built by CityBuilder.Outdoors)
-zone("NorthWallStairs", 322, 364, -516, -509, { surface = "None" })
-zone("SouthWallStairs", 24, 66, 309, 316, { surface = "None" })
 zone("TempleYardEast", -94, -88, -96, -60, { surface = "None" })
 
 --------------------------------------------------------------------------------------------------------------------

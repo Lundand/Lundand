@@ -116,7 +116,7 @@ function Hideout.build(layout: any, root: Instance, tavern: any): Folder
 	-- the cellar's floor reaches the doorway; a short sill bridges the wall openings
 	f:box("DoorSill", Vector3.new(5, 1, 1), landingX, cellarY - 0.5, cz1 + 0.5, floorColor, M.Slate, NO)
 	-- the wine rack that hides the way, swung aside
-	f:boxAt("SwungRack", Vector3.new(5, 7, 1.2), CFrame.new(landingX - 4.5, cellarY + 3.5, cz1 - 2.2) * CFrame.Angles(0, math.rad(70), 0), C.darkWood, M.Wood, NO)
+	f:boxAt("SwungRack", Vector3.new(5, 7, 1.2), CFrame.new(landingX - 4.5, cellarY + 3.5, cz1 - 2.7) * CFrame.Angles(0, math.rad(70), 0), C.darkWood, M.Wood, NO)
 
 	-- rooms
 	for _, room in ipairs(spec.rooms) do
@@ -153,7 +153,7 @@ function Hideout.build(layout: any, root: Instance, tavern: any): Folder
 			place(f, cx - 4, y, z1 - 3, 0, Furniture.barrel)
 			place(f, cx - 7, y, z1 - 3, 0, Furniture.barrel)
 		elseif room.kind == "Entrance" then
-			place(f, x0 + 4, y, z1 - 4, 0, function(g)
+			place(f, x0 + 5, y, z1 - 4, 0, function(g)
 				Furniture.crates(g, 3)
 			end)
 			place(f, x1 - 3, y, z1 - 6, -90, Furniture.chair)
@@ -185,7 +185,7 @@ function Hideout.build(layout: any, root: Instance, tavern: any): Folder
 				Furniture.board(g, "Jobs", 8)
 			end)
 			place(f, x1 - 2, y, z0 + 3, 0, Furniture.barrel)
-			place(f, x0 + 4, y, z1 - 3, 0, function(g)
+			place(f, x0 + 5, y, z1 - 3, 0, function(g)
 				Furniture.crates(g, 2)
 			end)
 		elseif room.kind == "Bunks" then

@@ -221,6 +221,9 @@ function LayoutRules.validate(layout: any, world: any, npcs: any): {string}
 				if math.abs(width - template.w) > 1e-6 or math.abs(depth - template.d) > 1e-6 or entry.stories ~= template.stories then
 					add(entry.id .. " doesn't match its house model " .. entry.template)
 				end
+				if template.style ~= nil and entry.style ~= template.style then
+					add(entry.id .. " is in a " .. tostring(entry.style) .. " district but its house model " .. entry.template .. " is " .. template.style)
+				end
 			end
 			if entry.door == nil then
 				add(entry.id .. " has a house model but no door")
@@ -257,6 +260,17 @@ function LayoutRules.validate(layout: any, world: any, npcs: any): {string}
 		for _, tower in ipairs(layout.wallTowers or {}) do
 			if LayoutRules.overlaps(entry, tower) then
 				add(entry.id .. " stands in the city wall's " .. tower.id)
+			end
+		end
+	end
+	-- the wall's towers stand clear of the streets and of planned open ground (gardens, yards, the wall stairs)
+	for _, tower in ipairs(layout.wallTowers or {}) do
+		register(tower)
+		for _, list in ipairs({ layout.roads, layout.ground }) do
+			for _, other in ipairs(list) do
+				if LayoutRules.overlaps(tower, other) then
+					add(tower.id .. " stands in " .. other.id)
+				end
 			end
 		end
 	end

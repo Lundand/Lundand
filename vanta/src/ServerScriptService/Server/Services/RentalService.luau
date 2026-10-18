@@ -4,7 +4,7 @@
 -- bigger and dearer with the inn: the Crooked Lantern in the slums, the Salt and Anchor at the harbour, the Square
 -- Inn. The Innkeeper's "I'd like a room" and each inn's rooms door (a part tagged InnRooms) open the rental window;
 -- with a rental running, the door takes you to your room. Renting follows Domain.Rentals: gold is taken and the
--- rental made or extended in one step under an operation ID, so a repeated request does nothing.
+-- rental made or extended in one step, so nobody pays without getting the room. Each request is a new payment.
 local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -38,13 +38,15 @@ local function rulesFor(inn: any): any
 	return rules
 end
 
+-- Is the player at the inn's rooms door, inside the inn? (The door stands in the back wall; the inn is on its +z side.)
 local function nearDoor(player: Player, innId: string): boolean
 	local door = doors[innId]
 	local root: any = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	if not door or not root then
 		return false
 	end
-	return (root.Position - door.Position).Magnitude <= DOOR_REACH
+	local offset = root.Position - door.Position
+	return offset.Magnitude <= DOOR_REACH and offset:Dot(door.CFrame:VectorToWorldSpace(Vector3.new(0, 0, 1))) > 0
 end
 
 function RentalService.open(player: Player, innId: any)
@@ -64,6 +66,7 @@ function RentalService.open(player: Player, innId: any)
 		room = inn.room,
 		pricePerDay = inn.pricePerDay,
 		maxDays = rules.maxDays,
+		dayLengthSeconds = rules.dayLengthSeconds,
 		gold = character.currencies.Gold or 0,
 		activeInn = activeInn,
 		activeInnName = activeInn and Content.world.inns[activeInn] and Content.world.inns[activeInn].displayName,
@@ -117,7 +120,7 @@ local function setupDoor(instance: Instance)
 	prompt.ObjectText = Content.world.inns[innId].displayName
 	prompt.HoldDuration = 0.2
 	prompt.MaxActivationDistance = 8
-	prompt.RequiresLineOfSight = false
+	prompt.RequiresLineOfSight = true -- not through the back wall from the street
 	prompt.Parent = door
 	prompt.Triggered:Connect(function(player: Player)
 		if limiter:allow(player) then

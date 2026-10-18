@@ -17,18 +17,51 @@ roblox.implementMethod("Instance", "WaitForChild", function(self, name)
 	return child
 end)
 
--- Model pivots (Lune has the WorldPivot property but not these methods)
-roblox.implementMethod("Model", "GetPivot", function(self)
-	return self.WorldPivot
+-- Model pivots (Lune has the WorldPivot property but not these methods). As in Roblox, a model with a PrimaryPart
+-- pivots on that part (its CFrame times its PivotOffset) and WorldPivot is ignored.
+local function pivotOf(model)
+	local primary = model.PrimaryPart
+	if primary ~= nil then
+		local ok, offset = pcall(function()
+			return primary.PivotOffset
+		end)
+		return primary.CFrame * (if ok and offset ~= nil then offset else roblox.CFrame.new())
+	end
+	return model.WorldPivot
+end
+roblox.implementMethod("Model", "GetPivot", pivotOf)
+-- the box round every part, turned like the model's pivot
+roblox.implementMethod("Model", "GetBoundingBox", function(self)
+	local pivot = pivotOf(self)
+	local frame = pivot - pivot.Position
+	local min, max = nil, nil
+	for _, part in self:GetDescendants() do
+		if part:IsA("BasePart") then
+			local half = part.Size / 2
+			for _, sx in { -1, 1 } do
+				for _, sy in { -1, 1 } do
+					for _, sz in { -1, 1 } do
+						local p = frame:PointToObjectSpace(part.CFrame:PointToWorldSpace(roblox.Vector3.new(sx * half.X, sy * half.Y, sz * half.Z)))
+						min = if min == nil then p else min:Min(p)
+						max = if max == nil then p else max:Max(p)
+					end
+				end
+			end
+		end
+	end
+	if min == nil then
+		return pivot, roblox.Vector3.new()
+	end
+	return frame * roblox.CFrame.new((min + max) / 2), max - min
 end)
 roblox.implementMethod("Model", "PivotTo", function(self, target)
-	local delta = target * self.WorldPivot:Inverse()
+	local delta = target * pivotOf(self):Inverse()
 	for _, part in self:GetDescendants() do
 		if part:IsA("BasePart") then
 			part.CFrame = delta * part.CFrame
 		end
 	end
-	self.WorldPivot = target
+	self.WorldPivot = delta * self.WorldPivot
 end)
 
 local game = roblox.Instance.new("DataModel")

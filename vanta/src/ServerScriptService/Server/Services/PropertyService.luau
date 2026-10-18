@@ -107,6 +107,7 @@ function PropertyService.reconcile(player: Player)
 	for _, outcome in ipairs(outcomes) do
 		if outcome.outcome == "Owned" then
 			notify(player, "Your purchase finished: the building is yours.")
+			services.InteriorService.recheck(outcome.propertyId)
 		elseif outcome.outcome == "Refunded" then
 			notify(player, "A building purchase didn't finish. Your gold was returned.")
 		end
@@ -158,6 +159,8 @@ local function buy(player: Player, propertyId: any)
 	if committed and result == true then
 		PropertyOwnership.finishPurchase(data, operationId)
 		notify(player, "The building is yours.")
+		-- anyone looking round it while it was for sale is shown out: a new home is private
+		services.InteriorService.recheck(propertyId)
 	else
 		PropertyService.reconcile(player)
 	end

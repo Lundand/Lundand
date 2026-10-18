@@ -31,7 +31,7 @@ opens to the sea in the east. Each white dot marks a door.
 | Houses | 373, each 16 to 40 studs wide, one to three storeys, built from 15 house models |
 | Homes for sale | 259 houses; 268 property IDs with the 6 storefronts and 3 guild halls |
 | Public buildings you walk into | 10, plus the church, the keep, the Royal Library and the fish market |
-| Parts | About 13,800, of which 97 cast light |
+| Parts | About 13,500, of which 97 cast light |
 
 ## How the buildings work
 
@@ -94,7 +94,8 @@ potions). The market stalls are decoration. The six storefronts are for players 
 - **One owner.** Each house has one property ID, so only one player can own it, on every server.
 - **Visiting.** Going in never grants ownership. Anyone can look round a home nobody owns.
 - **Privacy.** Once a home is owned, its door only lets in the people its owner allows. Owners choose Only me, My
-  friends or Anyone in the property window. When they change it, anyone inside who is no longer allowed is shown out.
+  friends or Anyone in the property window. Anyone inside who is no longer allowed is shown out: at once when the
+  owner changes it or the house is bought, and within a few seconds when that happens on another server.
 - **What can't be bought.** Public buildings, the castle, the church, warehouses, the hideout and other story places
   carry no deed. `CityLayout.spec` checks this.
 
@@ -110,8 +111,9 @@ players can rent it at once: each renter gets their own copy. Rooms are small, a
 | The Square Inn | Merchant Square | 14 x 16 | 50 |
 
 Use the Rooms door in the inn's back wall, or at the Square Inn ask the innkeeper. You rent at one inn at a time.
-Renting again there extends the stay, up to 7 days ahead. Gold is taken and the rental made in one step under an operation ID, so a repeated
-request does nothing. While the rental runs, the Rooms door takes you to your room. Prices are placeholders.
+Renting again there extends the stay, up to 7 days ahead. Gold is taken and the rental made in one step, so you
+never pay without getting the room. While the rental runs, the Rooms door takes you to your room. Prices are
+placeholders.
 
 ## The forest and the hideout
 
@@ -135,7 +137,7 @@ The spawner zones keep their IDs (`HideoutEntrance`, `HideoutHall`, `HideoutInne
 ## Running 50 to 200 players
 
 - **Few parts.** Houses are closed shells of a few dozen parts each. Rooms exist only while someone is in them,
-  so the city is about 13,800 parts.
+  so the city is about 13,500 parts.
 - **Streaming.** The patched place turns on `Workspace.StreamingEnabled`, so each client loads only what is near
   it. Places, NPC anchors and markers live in a model set to stream as Persistent, so quest guidance and prompts
   always find them. Before moving you into or out of a room, the server asks the client to stream that spot in.

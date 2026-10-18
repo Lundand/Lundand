@@ -21,6 +21,11 @@ local DOOR_HEIGHT = 8.4
 local DOOR_YAW = { South = 0, North = 180, East = 90, West = -90 }
 local TIMBERED = { Market = true, Residential = true, Craft = true }
 
+-- Where a building's door is across its facade (x in its frame): a third of the way along, or the middle if narrow.
+function Shell.doorX(W: number): number
+	return if W >= 18 then -W / 6 else 0
+end
+
 -- A building's frame and its facade width (W) and depth (D) as seen from its door.
 function Shell.frameOf(entry: any): (CFrame, number, number)
 	local door = entry.door or "South"
@@ -54,7 +59,7 @@ function Shell.build(model: Model, cf: CFrame, spec: Spec): BasePart?
 	local palette = Kit.palettes[spec.style] or Kit.palettes.Residential
 	local hollow = spec.hollow == true
 	local doorWidth = spec.doorWidth or (if hollow then 6 else 5)
-	local doorX = if W >= 18 then -W / 6 else 0
+	local doorX = Shell.doorX(W)
 	local winW = if spec.style == "Noble" or spec.style == "Royal" then 3.4 elseif spec.style == "Slum" then 2.4 else 3
 	local winH = if spec.style == "Noble" or spec.style == "Royal" then 6 elseif spec.style == "Slum" then 3.4 else 4.6
 	local groundTop = 0.6 + FH
@@ -163,7 +168,8 @@ function Shell.build(model: Model, cf: CFrame, spec: Spec): BasePart?
 		door = f:box("Door", Vector3.new(doorWidth, DOOR_HEIGHT, 0.4), doorX, 0.6 + DOOR_HEIGHT / 2, D / 2, rgb(84, 58, 38), M.WoodPlanks)
 		paint(door :: BasePart, "Door")
 	end
-	paint(f:box("Lintel", Vector3.new(doorWidth + 1.2, 0.6, 0.9), doorX, 0.6 + DOOR_HEIGHT + 0.3, D / 2, rgb(70, 50, 34), M.Wood, NO), "Timber")
+	-- (hanging a little below the door head, so its underside never lies in the wall's)
+	paint(f:box("Lintel", Vector3.new(doorWidth + 1.2, 0.6, 0.9), doorX, 0.6 + DOOR_HEIGHT + 0.25, D / 2, rgb(70, 50, 34), M.Wood, NO), "Timber")
 	paint(f:box("Step", Vector3.new(doorWidth + 1, 0.3, 1.2), doorX, 0.15, D / 2 + 0.6, palette.trim, M.Slate, NO), "Trim")
 
 	-- roof: eaves to the street, or a gable end facing it

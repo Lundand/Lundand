@@ -70,7 +70,23 @@ function CityBuilder.interiorKey(entry: any): string
 	return string.format("Room%dx%d", math.floor(W), math.floor(D))
 end
 
--- The house model for a template, built (and kept in CityAssets) the first time it is needed.
+local partCounts: {[Instance]: number} = {}
+local function partCount(model: Model): number
+	local count = partCounts[model]
+	if count == nil then
+		count = 0
+		for _, part in ipairs(model:GetDescendants()) do
+			if part:IsA("BasePart") then
+				count += 1
+			end
+		end
+		partCounts[model] = count
+	end
+	return count :: number
+end
+
+-- The house model for a template, built (and kept in CityAssets) the first time it is needed, in its district's
+-- style (window sizes, roof pitch, timber framing and chimney differ; colours are painted per house).
 local function houseModel(templateId: string): Model
 	local folder = assetFolder("Houses")
 	local existing = folder:FindFirstChild(templateId)
@@ -80,7 +96,7 @@ local function houseModel(templateId: string): Model
 	local t = Layout.templates[templateId]
 	local model = Instance.new("Model")
 	model.Name = templateId
-	Shell.build(model, CFrame.new(), { W = t.w, D = t.d, stories = t.stories, roof = t.roof, style = "Residential", floorHeight = Layout.floorHeight })
+	Shell.build(model, CFrame.new(), { W = t.w, D = t.d, stories = t.stories, roof = t.roof, style = t.style or "Residential", floorHeight = Layout.floorHeight })
 	model.WorldPivot = CFrame.new()
 	model.Parent = folder
 	return model
@@ -95,15 +111,94 @@ local function ensureInterior(key: string, width: number, depth: number, style: 
 	end
 end
 
--- A deed plaque on the wall beside a door (PropertyService gives it the View prompt). It hangs on the building's own
--- facade, so two neighbours' plaques never meet.
-local function deedSign(properties: Instance, propertyId: string, door: CFrame, doorWidth: number)
-	local f = Kit.frame(properties, door)
-	local sign = f:box(propertyId .. "Sign", Vector3.new(2.6, 1.8, 0.3), doorWidth / 2 + 1.8, 5.2, 0.45, rgb(214, 196, 150), Enum.Material.WoodPlanks, { collide = false, query = false })
+-- Front-wall openings near a door, as {x0, x1, y0, y1} in the door's frame (windows and glass on the facade).
+local function frontOpenings(model: Model, face: CFrame): {{number}}
+	local list = {}
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") and (part.Name == "Window" or part.Name == "Glass") then
+			local p = face:PointToObjectSpace(part.CFrame.Position)
+			if math.abs(p.Z) < 1.2 then
+				local hx, hy = part.Size.X / 2, part.Size.Y / 2
+				table.insert(list, { p.X - hx, p.X + hx, p.Y - hy, p.Y + hy })
+			end
+		end
+	end
+	return list
+end
+
+-- A deed plaque on the wall beside a door (PropertyService gives it the View prompt), reading towards the street.
+-- `face` is the door's middle at its sill, on the front wall (+z out); the plaque goes on whichever side of the door
+-- has no window, inside the facade (x from `left` to `right` in that frame), or low under the windows if both do.
+local function deedSign(properties: Instance, propertyId: string, face: CFrame, doorWidth: number, left: number, right: number, openings: {{number}})
+	local w, h, gap = 2.6, 1.8, 0.2
+	local function clear(x: number, y: number): boolean
+		if x - w / 2 < left + 0.3 or x + w / 2 > right - 0.3 then
+			return false
+		end
+		for _, o in ipairs(openings) do
+			if x + w / 2 + gap > o[1] and x - w / 2 - gap < o[2] and y + h / 2 + gap > o[3] and y - h / 2 - gap < o[4] then
+				return false
+			end
+		end
+		return true
+	end
+	local offset = doorWidth / 2 + 1.8
+	local x, y = offset, 5.2
+	if not clear(x, y) then
+		if clear(-offset, y) then
+			x = -offset
+		elseif clear(offset, 2) then
+			y = 2
+		else
+			x, y = -offset, 2
+		end
+	end
+	local f = Kit.frame(properties, face)
+	local sign = f:box(propertyId .. "Sign", Vector3.new(w, h, 0.3), x, y, 0.2, rgb(214, 196, 150), Enum.Material.WoodPlanks, { collide = false, query = false })
 	sign:SetAttribute("PropertyId", propertyId)
 	sign:AddTag("PropertySign")
-	Kit.sign(sign, Enum.NormalId.Front, "Deed: " .. propertyId, rgb(60, 40, 20))
+	-- the plaque faces the street (+z), which is a part's back face
+	Kit.sign(sign, Enum.NormalId.Back, "Deed: " .. propertyId, rgb(60, 40, 20))
 end
+
+-- Where the door to an inn's rooms goes in its back wall: as near a third of the way along as it can be without
+-- standing in front of a window or over the cellar trapdoor.
+local function roomsDoorX(model: Model, cf: CFrame, W: number, D: number, trapdoor: any?): number
+	local blocked = {}
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") and part.Name == "Glass" then
+			local p = cf:PointToObjectSpace(part.CFrame.Position)
+			if p.Z < -D / 2 + 2 then
+				table.insert(blocked, { p.X - part.Size.X / 2 - 0.2, p.X + part.Size.X / 2 + 0.2 })
+			end
+		end
+	end
+	if trapdoor ~= nil then
+		table.insert(blocked, { trapdoor.x0 - 1, trapdoor.x1 + 1 })
+	end
+	local function clear(x: number): boolean
+		if math.abs(x) > W / 2 - 4 then
+			return false
+		end
+		for _, range in ipairs(blocked) do
+			if x + 2.5 > range[1] and x - 2.5 < range[2] then
+				return false
+			end
+		end
+		return true
+	end
+	for step = 0, math.ceil(W) do
+		for _, x in ipairs({ -W / 6 - step * 0.5, -W / 6 + step * 0.5 }) do
+			if clear(x) then
+				return x
+			end
+		end
+	end
+	return -W / 6
+end
+
+-- What a closed building's door is called on its prompt.
+local DOOR_NAMES = { Storefront = "Shop", Warehouse = "Warehouse" }
 
 local BACK_OF = { South = "North", North = "South", East = "West", West = "East" }
 
@@ -195,6 +290,7 @@ function CityBuilder.build(options: Options?): Model
 	local parent = opts.parent or workspace
 	local started = os.clock()
 	Kit.stats.parts, Kit.stats.lights = 0, 0
+	table.clear(partCounts)
 	Kit.setYield(if opts.yield then 2500 else 0, if opts.yield then function()
 		task.wait()
 	end else nil)
@@ -277,21 +373,26 @@ function CityBuilder.build(options: Options?): Model
 				Kit.lightBudget = math.huge
 				local innId = innByLocation[entry.locationId]
 				if innId ~= nil then
-					-- the door to the rented rooms, in the back wall
-					local roomsDoor = Kit.part(model, "RoomsDoor", Vector3.new(5, 8.4, 0.4), cf * CFrame.new(-W / 6, 0.6 + 4.2, -D / 2 + 1.2), rgb(84, 58, 38), Enum.Material.WoodPlanks)
+					-- the door to the rented rooms, against the back wall
+					local x = roomsDoorX(model, cf, W, D, entry.trapdoor)
+					local roomsDoor = Kit.part(model, "RoomsDoor", Vector3.new(5, 8.4, 0.4), cf * CFrame.new(x, 0.6 + 4.2, -D / 2 + 1.2), rgb(84, 58, 38), Enum.Material.WoodPlanks)
 					roomsDoor:SetAttribute("InnId", innId)
 					roomsDoor:AddTag("InnRooms")
 				end
 				if entry.propertyId ~= nil then
-					deedSign(properties, entry.propertyId, cf * CFrame.new(if W >= 18 then -W / 6 else 0, 0.6, D / 2), 6)
+					local doorX = Shell.doorX(W)
+					local face = cf * CFrame.new(doorX, 0.6, D / 2)
+					deedSign(properties, entry.propertyId, face, 6, -W / 2 - doorX, W / 2 - doorX, frontOpenings(model, face))
 				end
 			else
 				-- a house: a painted clone of its model (or a shell sized to it), the door leading to its interior
 				if entry.template ~= nil then
-					model = houseModel(entry.template):Clone()
+					local template = houseModel(entry.template)
+					model = template:Clone()
 					model.Name = entry.id
 					model:PivotTo(cf)
 					model.Parent = folder
+					Kit.count(partCount(template))
 				else
 					model = Kit.model(folder, entry.id)
 					Shell.build(model, cf, { W = W, D = D, stories = entry.stories, roof = if W <= 24 then "Gable" else "Eaves", style = entry.style or "Residential", floorHeight = Layout.floorHeight })
@@ -304,11 +405,13 @@ function CityBuilder.build(options: Options?): Model
 				if door ~= nil and door:IsA("BasePart") then
 					door:SetAttribute("HouseId", entry.id)
 					door:SetAttribute("Interior", key)
-					door:SetAttribute("DisplayName", entry.name or (if entry.propertyId then "Home" else "House"))
+					door:SetAttribute("DisplayName", entry.name or DOOR_NAMES[entry.use] or (if entry.propertyId then "Home" else "House"))
 					if entry.propertyId ~= nil then
 						door:SetAttribute("PropertyId", entry.propertyId)
-						-- the door's frame, at its sill on the wall's face
-						deedSign(properties, entry.propertyId, door.CFrame * CFrame.new(0, -door.Size.Y / 2, -door.Size.Z / 2), door.Size.X)
+						-- the door's middle at its sill, on the front wall
+						local face = door.CFrame * CFrame.new(0, -door.Size.Y / 2, 0)
+						local doorX = cf:PointToObjectSpace(face.Position).X
+						deedSign(properties, entry.propertyId, face, door.Size.X, -W / 2 - doorX, W / 2 - doorX, frontOpenings(model, face))
 					end
 					door:AddTag("HouseDoor")
 				else
@@ -415,11 +518,20 @@ function CityBuilder.build(options: Options?): Model
 	boundary(edges, 760, water.center[2] - water.size[2] / 2, 900, water.center[2] - water.size[2] / 2)
 	local _ = seaX0
 
-	root:SetAttribute("Parts", Kit.stats.parts)
-	root:SetAttribute("Lights", Kit.stats.lights)
+	-- what the city really holds (cloned houses never pass through Kit.part, and templates live in ServerStorage)
+	local parts, lights = 0, 0
+	for _, item in ipairs(root:GetDescendants()) do
+		if item:IsA("BasePart") then
+			parts += 1
+		elseif item:IsA("Light") then
+			lights += 1
+		end
+	end
+	root:SetAttribute("Parts", parts)
+	root:SetAttribute("Lights", lights)
 	root:SetAttribute("BuildSeconds", math.floor((os.clock() - started) * 100) / 100)
 	Kit.setYield(0, nil)
-	print(string.format("[CityBuilder] built %d parts, %d lights in %.1fs", Kit.stats.parts, Kit.stats.lights, os.clock() - started))
+	print(string.format("[CityBuilder] built %d parts, %d lights in %.1fs", parts, lights, os.clock() - started))
 	return root
 end
 

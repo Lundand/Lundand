@@ -37,7 +37,8 @@ end
 local function spire(f: Frame, x: number, y: number, z: number, size: number, height: number, color: Color3, material: Enum.Material)
 	for index = 0, 3 do
 		local a = index * math.pi / 2
-		local cf = CFrame.new(x, y + height / 2, z) * CFrame.Angles(0, a, 0) * CFrame.new(0, 0, size / 4)
+		-- neighbouring wedges' undersides overlap at the corners; each sits a little higher than the last
+		local cf = CFrame.new(x, y + height / 2 + index * 0.03, z) * CFrame.Angles(0, a, 0) * CFrame.new(0, 0, size / 4)
 		f:wedgeAt("Spire", Vector3.new(size, height, size / 2), cf * CFrame.Angles(0, math.pi, 0), color, material, NO)
 	end
 end
@@ -333,9 +334,11 @@ function Landmarks.keep(entry: any, parent: Instance): Model
 		f:box("GalleryRail", Vector3.new(0.4, 3.4, hallFront + hd - T - 0.4), s * hallX, UP + 1.7, (hallFront - 0.4 - hd + T) / 2, C.darkWood, M.Wood)
 	end
 	f:box("GalleryRail", Vector3.new(hallX * 2, 3.4, 0.4), 0, UP + 1.7, hallFront, C.darkWood, M.Wood)
-	-- the upper floor's rooms: council chamber (left), royal apartments (right), divided along z = -4
+	-- the upper floor's rooms: council chamber (left), royal apartments (right), divided along z = -4; on the left
+	-- the wall stops at the stairwell's rail
 	for _, s in ipairs({ -1, 1 }) do
-		Kit.wall(f, "UpperRoomWall", true, -4, math.min(s * (hallX + 0.4), s * (hw - T)), math.max(s * (hallX + 0.4), s * (hw - T)), UP, wallTop - 10.6, 1, { { from = s * (hallX + 0.4) + (if s == 1 then 3 else -7), to = s * (hallX + 0.4) + (if s == 1 then 7 else -3), bottom = UP, top = UP + 8.4 } }, stone, M.Limestone)
+		local outer = if s == 1 then hw - T else stairX1 + 0.15
+		Kit.wall(f, "UpperRoomWall", true, -4, math.min(s * (hallX + 0.4), outer), math.max(s * (hallX + 0.4), outer), UP, wallTop - 10.6, 1, { { from = s * (hallX + 0.4) + (if s == 1 then 3 else -7), to = s * (hallX + 0.4) + (if s == 1 then 7 else -3), bottom = UP, top = UP + 8.4 } }, stone, M.Limestone)
 	end
 	-- roof over the walls (flat leads behind the battlements) and the hall ceiling
 	-- the flat roof sits a little below the wall tops, inside them

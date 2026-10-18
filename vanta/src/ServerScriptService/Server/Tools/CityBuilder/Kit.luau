@@ -134,6 +134,15 @@ local function counted()
 	end
 end
 
+-- Counts parts made some other way (cloned house models), pausing as Kit.part would.
+function Kit.count(parts: number)
+	local before = Kit.stats.parts
+	Kit.stats.parts += parts
+	if yieldFn ~= nil and yieldEvery > 0 and math.floor(Kit.stats.parts / yieldEvery) > math.floor(before / yieldEvery) then
+		yieldFn()
+	end
+end
+
 export type Options = { collide: boolean?, transparency: number?, shape: Enum.PartType?, shadow: boolean?, query: boolean? }
 
 local function setup(item: BasePart, name: string, size: Vector3, cf: CFrame, color: Color3, material: Enum.Material, options: Options?)

@@ -1,7 +1,10 @@
 --!nocheck
 -- lune run tools/inspect-city.luau — builds the city offline and checks:
---   * every house door is tagged HouseDoor and leads to an interior model that exists (with Entry and ExitDoor)
---   * every public building's doorway is clear, and every inn has its rooms door and room model
+--   * every house door is tagged HouseDoor and leads to an interior model that exists (with Entry and ExitDoor),
+--     and the spot in front of it where you come out is clear
+--   * every room sits on its pivot, fits its slot, and has Entry clear of its walls
+--   * deed plaques read towards the street and hang clear of windows; estate gates line up with the mansion doors
+--   * every public building's doorway is clear, and every inn has its rooms door (clear of windows) and room model
 --   * flicker: no two visible faces of different parts lie in the same plane, facing the same way, overlapping
 -- Prints the problems and a summary; exits 1 if there are any.
 local roblox = require("@lune/roblox")
@@ -13,6 +16,7 @@ local game = Harness.game
 local CityBuilder = Harness.require(Harness.find("ServerScriptService.Server.Tools.CityBuilder"))
 local Content = Harness.require(Harness.find("ReplicatedStorage.Shared.Content"))
 local Layout = Harness.require(Harness.find("ServerStorage.ServerData.CityLayout"))
+local LayoutRules = Harness.require(Harness.find("ServerScriptService.Server.Domain.LayoutRules"))
 
 local city = CityBuilder.build()
 local problems = {}
@@ -72,6 +76,183 @@ for innId in Content.world.inns do
 	end
 end
 
+-- Separating-axis test between two boxes (CFrame, size); margin shrinks them (so touching isn't overlapping).
+local function boxesOverlap(cfA, sizeA, cfB, sizeB, margin)
+	local axesA = { cfA.RightVector, cfA.UpVector, cfA.LookVector }
+	local axesB = { cfB.RightVector, cfB.UpVector, cfB.LookVector }
+	local ha, hb = sizeA / 2, sizeB / 2
+	local ea, eb = { ha.X, ha.Y, ha.Z }, { hb.X, hb.Y, hb.Z }
+	local d = cfB.Position - cfA.Position
+	local axes = {}
+	for i = 1, 3 do
+		table.insert(axes, axesA[i])
+		table.insert(axes, axesB[i])
+		for j = 1, 3 do
+			local c = axesA[i]:Cross(axesB[j])
+			if c.Magnitude > 1e-4 then
+				table.insert(axes, c.Unit)
+			end
+		end
+	end
+	for _, axis in axes do
+		local ra, rb = 0, 0
+		for i = 1, 3 do
+			ra += ea[i] * math.abs(axesA[i]:Dot(axis))
+			rb += eb[i] * math.abs(axesB[i]:Dot(axis))
+		end
+		if math.abs(d:Dot(axis)) >= ra + rb - (margin or 0) then
+			return false
+		end
+	end
+	return true
+end
+
+-- every part of the city on a coarse grid, for "what is near here" questions
+local nearGrid, NEAR = {}, 24
+for _, d in city:GetDescendants() do
+	if d:IsA("BasePart") then
+		local p, half = d.CFrame.Position, d.Size / 2
+		local r = half.Magnitude
+		for i = math.floor((p.X - r) / NEAR), math.floor((p.X + r) / NEAR) do
+			for j = math.floor((p.Z - r) / NEAR), math.floor((p.Z + r) / NEAR) do
+				local key = i .. ":" .. j
+				nearGrid[key] = nearGrid[key] or {}
+				table.insert(nearGrid[key], d)
+			end
+		end
+	end
+end
+local function partsNear(point)
+	local seen, list = {}, {}
+	for i = math.floor(point.X / NEAR) - 1, math.floor(point.X / NEAR) + 1 do
+		for j = math.floor(point.Z / NEAR) - 1, math.floor(point.Z / NEAR) + 1 do
+			for _, part in nearGrid[i .. ":" .. j] or {} do
+				if not seen[part] then
+					seen[part] = true
+					table.insert(list, part)
+				end
+			end
+		end
+	end
+	return list
+end
+
+-- rooms: InteriorService pivots a room onto its slot and measures its box; the box must sit on the slot, fit in it
+-- with room to spare, and have Entry inside it, clear of the walls
+local spacing = Layout.interiors.spacing
+for _, room in interiors:GetChildren() do
+	local copy = room:Clone()
+	copy:PivotTo(roblox.CFrame.new(1000, 500, 1000))
+	local entry = copy:FindFirstChild("Entry")
+	local boxCf, size = copy:GetBoundingBox()
+	local offset = boxCf.Position - Vector3.new(1000, 500, 1000)
+	if math.abs(offset.X) > 0.5 or math.abs(offset.Z) > 0.5 then
+		problem(string.format("interior %s is off its pivot by (%.1f, %.1f)", room.Name, offset.X, offset.Z))
+	end
+	if math.max(size.X, size.Z) + 16 > spacing then
+		problem(string.format("interior %s (%.0f x %.0f) doesn't fit a %d-stud slot", room.Name, size.X, size.Z, spacing))
+	end
+	if entry ~= nil then
+		local body = roblox.CFrame.new(entry.CFrame.Position + Vector3.new(0, 3, 0))
+		for _, part in copy:GetDescendants() do
+			if part:IsA("BasePart") and part.CanCollide and boxesOverlap(body, Vector3.new(2, 4.8, 2), part.CFrame, part.Size, 0.01) then
+				problem("interior " .. room.Name .. "'s Entry stands in " .. part.Name)
+			end
+		end
+	end
+end
+
+-- house doors: where you come out (InteriorService: 3 studs in front of the door) is clear for a character
+for _, d in city:GetDescendants() do
+	if d:IsA("BasePart") and d:HasTag("HouseDoor") then
+		local out = d.CFrame:VectorToWorldSpace(Vector3.new(0, 0, 1))
+		local feet = d.CFrame.Position - Vector3.new(0, d.Size.Y / 2, 0)
+		local spot = feet + out * 3 + Vector3.new(0, 2.7, 0)
+		local body = roblox.CFrame.lookAt(spot, spot + out)
+		for _, part in partsNear(spot) do
+			if part.CanCollide and part ~= d and boxesOverlap(body, Vector3.new(2, 5, 1.2), part.CFrame, part.Size, 0.01) then
+				problem(tostring(d:GetAttribute("HouseId")) .. "'s way out runs into " .. part.Name)
+				break
+			end
+		end
+	end
+end
+
+-- deed plaques read towards the street and hang clear of windows
+for _, d in city:GetDescendants() do
+	if d:IsA("BasePart") and d:HasTag("PropertySign") then
+		local gui = d:FindFirstChildOfClass("SurfaceGui")
+		local facing = nil
+		if gui ~= nil and gui.Face == roblox.Enum.NormalId.Back then
+			facing = d.CFrame.LookVector * -1
+		elseif gui ~= nil and gui.Face == roblox.Enum.NormalId.Front then
+			facing = d.CFrame.LookVector
+		end
+		local owner = nil
+		for _, entry in Layout.blocks do
+			if entry.propertyId ~= nil and entry.propertyId == d:GetAttribute("PropertyId") then
+				owner = entry
+			end
+		end
+		if facing == nil or owner == nil then
+			problem("deed plaque " .. d.Name .. " has no text or no building")
+		else
+			local ahead = d.CFrame.Position + facing
+			if LayoutRules.contains(owner, { ahead.X, ahead.Z }) then
+				problem("deed plaque " .. d.Name .. " reads towards the wall")
+			end
+			for _, part in partsNear(d.CFrame.Position) do
+				if (part.Name == "Window" or part.Name == "Glass") and boxesOverlap(d.CFrame, d.Size, part.CFrame, part.Size, -0.05) then
+					problem("deed plaque " .. d.Name .. " hangs over a window")
+					break
+				end
+			end
+		end
+	end
+end
+
+-- inn rooms doors stand clear of the back windows
+for _, d in city:GetDescendants() do
+	if d.Name == "RoomsDoor" and d:IsA("BasePart") then
+		for _, part in d.Parent:GetDescendants() do
+			if part:IsA("BasePart") and part.Name == "Glass" then
+				local p = d.CFrame:PointToObjectSpace(part.CFrame.Position)
+				if math.abs(p.X) < d.Size.X / 2 + part.Size.X / 2 and math.abs(p.Z) < 2 then
+					problem(d.Parent.Name .. "'s rooms door stands in front of a window")
+				end
+			end
+		end
+	end
+end
+
+-- estate gates: the path from a mansion's door straight out to its garden wall goes through the gate
+for _, entry in Layout.blocks do
+	if entry.estate ~= nil and models[entry.id] ~= nil then
+		local door = models[entry.id]:FindFirstChild("Door", true)
+		if door ~= nil then
+			local out = door.CFrame:VectorToWorldSpace(Vector3.new(0, 0, 1))
+			local from = door.CFrame.Position - Vector3.new(0, door.Size.Y / 2 - 1.5, 0)
+			local blocked = false
+			-- out to just past its own garden wall
+			local garden = { center = entry.estate.center, size = { entry.estate.size[1] + 4, entry.estate.size[2] + 4 } }
+			for step = 1, 80 do
+				local point = from + out * step
+				if not LayoutRules.contains(garden, { point.X, point.Z }) then
+					break
+				end
+				for _, part in partsNear(point) do
+					if part.Name == "GardenWall" and boxesOverlap(roblox.CFrame.new(point), Vector3.new(2, 1, 0.5), part.CFrame, part.Size, 0) then
+						blocked = true
+					end
+				end
+			end
+			if blocked then
+				problem(entry.id .. "'s garden gate doesn't line up with its door")
+			end
+		end
+	end
+end
+
 -- doorways of public buildings: nothing solid in the opening
 for _, entry in Layout.blocks do
 	local model = models[entry.id]
@@ -126,9 +307,9 @@ local function addFaces(part)
 				keep = (axis == 2 and sign == -1) or (axis == 3 and sign == 1)
 			end
 			local n = axes[axis] * sign
-			-- faces turned to the ground rest on something; flicker there can't be seen
-			if keep and n.Y > -0.9 then
-				local centre = cf.Position + n * sizes[axis]
+			local centre = cf.Position + n * sizes[axis]
+			-- a face turned down at street level rests on the ground
+			if keep and not (n.Y < -0.9 and centre.Y < 0.5) then
 				local u = axes[axis % 3 + 1]
 				local v = axes[(axis + 1) % 3 + 1]
 				local hu, hv = sizes[axis % 3 + 1], sizes[(axis + 1) % 3 + 1]

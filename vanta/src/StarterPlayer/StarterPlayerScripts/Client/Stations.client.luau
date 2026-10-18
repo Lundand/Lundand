@@ -361,9 +361,22 @@ local function renderRentals()
 			end, 200))
 		end
 	end
+	-- a stay can run at most maxDays ahead, counting the time already paid for
+	local dayLength = view.dayLengthSeconds or 86400
+	local paid = if view.activeInn == view.innId then view.secondsLeft else 0
+	local options = {}
+	for _, days in ipairs({ 1, 3, view.maxDays }) do
+		if not table.find(options, days) and days * dayLength + paid <= view.maxDays * dayLength then
+			table.insert(options, days)
+		end
+	end
+	if #options == 0 then
+		Ui.text(rentalBody, string.format("A stay can be paid at most %d days ahead.", view.maxDays), 13, Ui.colors.muted)
+		return
+	end
 	local row = Ui.row(rentalBody)
 	local innId = view.innId
-	for _, days in ipairs({ 1, 3, view.maxDays }) do
+	for _, days in ipairs(options) do
 		local cost = days * view.pricePerDay
 		local label = string.format("%s %d day%s (%d gold)", if view.activeInn == view.innId then "Stay" else "Rent", days, if days == 1 then "" else "s", cost)
 		local button = Ui.button(row, label, function()

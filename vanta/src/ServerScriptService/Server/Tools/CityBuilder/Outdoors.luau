@@ -5,6 +5,7 @@
 local Kit = require(script.Parent.Kit)
 local Furniture = require(script.Parent.Furniture)
 local Landmarks = require(script.Parent.Landmarks)
+local Shell = require(script.Parent.Shell)
 local LayoutRules = require(script.Parent.Parent.Parent.Domain.LayoutRules)
 
 local Outdoors = {}
@@ -505,13 +506,17 @@ function Outdoors.estates(layout: any, root: Instance)
 			local stone = rgb(200, 194, 180)
 			local door = entry.door or "South"
 			local houseX, houseZ = entry.center[1] - cx, entry.center[2] - cz
+			-- the gate lines up with the house's door, which is off the facade's middle on a wide house
+			local cf, W, D = Shell.frameOf(entry)
+			local doorAt = cf:PointToWorldSpace(Vector3.new(Shell.doorX(W), 0, D / 2))
+			local doorX, doorZ = doorAt.X - cx, doorAt.Z - cz
 			for _, side in ipairs({ "North", "South", "West", "East" }) do
 				local alongX = side == "North" or side == "South"
 				local fixed = if side == "North" then -d / 2 elseif side == "South" then d / 2 elseif side == "West" then -w / 2 else w / 2
 				local run = if alongX then w else d
 				local openings = {}
 				if side == door then
-					local at = if alongX then houseX else houseZ
+					local at = if alongX then doorX else doorZ
 					table.insert(openings, { from = at - 4, to = at + 4, bottom = 0, top = 4 })
 				end
 				-- north and south walls run over the corners to the side walls' outer faces; the side walls stop
@@ -519,7 +524,7 @@ function Outdoors.estates(layout: any, root: Instance)
 				local inset = if alongX then -0.6 else 0.6
 				Kit.wall(f, "GardenWall", alongX, fixed, -run / 2 + inset, run / 2 - inset, 0, 3, 1.2, openings, stone, M.Limestone)
 				if side == door then
-					local at = if alongX then houseX else houseZ
+					local at = if alongX then doorX else doorZ
 					for _, s in ipairs({ -1, 1 }) do
 						local gx, gz = if alongX then at + s * 4.6 else fixed, if alongX then fixed else at + s * 4.6
 						f:box("GatePillar", Vector3.new(1.8, 5, 1.8), gx, 2.5, gz, stone, M.Limestone)

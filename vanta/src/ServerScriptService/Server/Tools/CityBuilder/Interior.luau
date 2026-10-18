@@ -31,10 +31,11 @@ function Interior.build(name: string, width: number, depth: number, style: strin
 	local exit = f:box("ExitDoor", Vector3.new(5, 8.4, 0.4), doorX, 4.2, hd - 0.2, rgb(84, 58, 38), M.WoodPlanks)
 	exit.CanQuery = true
 	-- where you appear, facing into the room (a part's front is -z)
-	local entry = f:box("Entry", Vector3.new(2, 1, 2), doorX, 0.5, hd - 4, rgb(255, 255, 255), M.SmoothPlastic, { collide = false, query = false, transparency = 1, shadow = false })
+	f:box("Entry", Vector3.new(2, 1, 2), doorX, 0.5, hd - 4, rgb(255, 255, 255), M.SmoothPlastic, { collide = false, query = false, transparency = 1, shadow = false })
 	local lamp = f:box("CeilingLamp", Vector3.new(1.2, 0.6, 1.2), 0, HEIGHT - 0.6, 0, rgb(255, 220, 160), M.Neon, { collide = false, query = false, shadow = false })
 	Kit.light(lamp, rgb(255, 214, 160), math.max(width, depth) + 6, 1.1)
-	model.PrimaryPart = entry
+	-- no PrimaryPart: the room pivots on its floor centre (WorldPivot), which is where InteriorService puts it
+	model.WorldPivot = CFrame.new()
 	return model
 end
 
