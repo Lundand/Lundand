@@ -1,0 +1,181 @@
+--!strict
+-- Crafting recipes (L-31). learned = true means the recipe must be learned before use. Placeholder values.
+local Table = require(script.Parent.Parent.Util.Table)
+
+return Table.deepFreeze({
+	MinorHealthPotion = {
+		id = "MinorHealthPotion",
+		displayName = "Minor Health Potion",
+		profession = "Alchemy",
+		process = "Brewing",
+		minProfessionLevel = 1,
+		learned = false,
+		inputs = { { itemId = "HealingHerb", amount = 2 } },
+		output = { itemId = "MinorHealthPotion", amount = 1 },
+		professionXp = 15,
+	},
+	TrainingSword = {
+		id = "TrainingSword",
+		displayName = "Training Sword",
+		profession = "Blacksmithing",
+		process = "Forging",
+		minProfessionLevel = 1,
+		learned = false,
+		inputs = { { itemId = "CopperOre", amount = 4 }, { itemId = "OakLog", amount = 1 } },
+		output = { itemId = "TrainingSword", amount = 1 },
+		professionXp = 25,
+	},
+	CopperPickaxe = {
+		id = "CopperPickaxe",
+		displayName = "Copper Pickaxe",
+		profession = "Blacksmithing",
+		process = "Forging",
+		minProfessionLevel = 1,
+		learned = false,
+		inputs = { { itemId = "CopperOre", amount = 5 }, { itemId = "OakLog", amount = 2 } },
+		output = { itemId = "CopperPickaxe", amount = 1 },
+		professionXp = 25,
+	},
+	-- sword progression (WEAPON_PROGRESSION_PLAN.md): the level-16 smith's longsword, from mountain iron
+	MountainGuardLongsword = {
+		id = "MountainGuardLongsword", displayName = "Mountain Guard Longsword", profession = "Blacksmithing", process = "Forging",
+		minProfessionLevel = 17, learned = true,
+		inputs = { { itemId = "IronOre", amount = 6 }, { itemId = "ScrapMetal", amount = 2 }, { itemId = "OakLog", amount = 1 } },
+		output = { itemId = "MountainGuardLongsword", amount = 1 },
+		professionXp = 140, itemLevel = 22,
+	},
+	-- recipes for every weapon and armour piece (WEAPON_PROGRESSION_PLAN.md): starter gear is open to all smiths
+	-- (learned = false); everything else is learned from a recipe scroll that drops from enemies (learned = true)
+	CutpursesShortsword = {
+		id = "CutpursesShortsword", displayName = "Cutpurse's Shortsword", profession = "Blacksmithing", process = "Forging", minProfessionLevel = 3, learned = true,
+		inputs = { { itemId = "CopperOre", amount = 4 }, { itemId = "LeatherScraps", amount = 2 } },
+		output = { itemId = "CutpursesShortsword", amount = 1 },
+		professionXp = 35, itemLevel = 4,
+	},
+	WatchmansSword = {
+		id = "WatchmansSword", displayName = "Watchman's Sword", profession = "Blacksmithing", process = "Forging", minProfessionLevel = 6, learned = true,
+		inputs = { { itemId = "CopperOre", amount = 6 }, { itemId = "OakLog", amount = 1 }, { itemId = "LeatherScraps", amount = 1 } },
+		output = { itemId = "WatchmansSword", amount = 1 },
+		professionXp = 50, itemLevel = 8,
+	},
+	BanditsSaber = {
+		id = "BanditsSaber", displayName = "Bandit's Saber", profession = "Blacksmithing", process = "Forging", minProfessionLevel = 9, learned = true,
+		inputs = { { itemId = "IronOre", amount = 3 }, { itemId = "ScrapMetal", amount = 2 }, { itemId = "LeatherScraps", amount = 2 } },
+		output = { itemId = "BanditsSaber", amount = 1 },
+		professionXp = 80, itemLevel = 12,
+	},
+	IronwroughtBastardSword = {
+		id = "IronwroughtBastardSword", displayName = "Ironwrought Bastard Sword", profession = "Blacksmithing", process = "Forging", minProfessionLevel = 11, learned = true,
+		inputs = { { itemId = "IronOre", amount = 5 }, { itemId = "ScrapMetal", amount = 2 }, { itemId = "OakLog", amount = 1 } },
+		output = { itemId = "IronwroughtBastardSword", amount = 1 },
+		professionXp = 95, itemLevel = 14,
+	},
+	GoblinHookblade = {
+		id = "GoblinHookblade", displayName = "Goblin Hookblade", profession = "Blacksmithing", process = "Forging", minProfessionLevel = 15, learned = true,
+		inputs = { { itemId = "IronOre", amount = 5 }, { itemId = "ScrapMetal", amount = 4 } },
+		output = { itemId = "GoblinHookblade", amount = 1 },
+		professionXp = 130, itemLevel = 19,
+	},
+	SilverwroughtRapier = {
+		id = "SilverwroughtRapier", displayName = "Silverwrought Rapier", profession = "Blacksmithing", process = "Forging", minProfessionLevel = 22, learned = true,
+		inputs = { { itemId = "SilverOre", amount = 4 }, { itemId = "IronOre", amount = 3 }, { itemId = "LeatherScraps", amount = 2 } },
+		output = { itemId = "SilverwroughtRapier", amount = 1 },
+		professionXp = 200, itemLevel = 27,
+	},
+	ApprenticeStaff = {
+		id = "ApprenticeStaff", displayName = "Apprentice Staff", profession = "Blacksmithing", process = "Forging", minProfessionLevel = 1, learned = false,
+		inputs = { { itemId = "OakLog", amount = 3 }, { itemId = "CopperOre", amount = 1 } },
+		output = { itemId = "ApprenticeStaff", amount = 1 },
+		professionXp = 25,
+	},
+	TrainingMace = {
+		id = "TrainingMace", displayName = "Training Mace", profession = "Blacksmithing", process = "Forging", minProfessionLevel = 1, learned = false,
+		inputs = { { itemId = "CopperOre", amount = 4 }, { itemId = "OakLog", amount = 1 } },
+		output = { itemId = "TrainingMace", amount = 1 },
+		professionXp = 25,
+	},
+	WornKnuckles = {
+		id = "WornKnuckles", displayName = "Worn Knuckles", profession = "Blacksmithing", process = "Forging", minProfessionLevel = 1, learned = false,
+		inputs = { { itemId = "CopperOre", amount = 2 }, { itemId = "LeatherScraps", amount = 2 } },
+		output = { itemId = "WornKnuckles", amount = 1 },
+		professionXp = 25,
+	},
+	HuntingBow = {
+		id = "HuntingBow", displayName = "Hunting Bow", profession = "Blacksmithing", process = "Forging", minProfessionLevel = 1, learned = false,
+		inputs = { { itemId = "OakLog", amount = 3 }, { itemId = "LeatherScraps", amount = 1 } },
+		output = { itemId = "HuntingBow", amount = 1 },
+		professionXp = 25,
+	},
+	CopperHatchet = {
+		id = "CopperHatchet", displayName = "Copper Hatchet", profession = "Blacksmithing", process = "Forging", minProfessionLevel = 1, learned = false,
+		inputs = { { itemId = "CopperOre", amount = 3 }, { itemId = "OakLog", amount = 1 } },
+		output = { itemId = "CopperHatchet", amount = 1 },
+		professionXp = 25,
+	},
+	IronSpear = {
+		id = "IronSpear", displayName = "Iron Spear", profession = "Blacksmithing", process = "Forging", minProfessionLevel = 5, learned = true,
+		inputs = { { itemId = "IronOre", amount = 4 }, { itemId = "OakLog", amount = 2 } },
+		output = { itemId = "IronSpear", amount = 1 },
+		professionXp = 60,
+	},
+	IronGreataxe = {
+		id = "IronGreataxe", displayName = "Iron Greataxe", profession = "Blacksmithing", process = "Forging", minProfessionLevel = 6, learned = true,
+		inputs = { { itemId = "IronOre", amount = 6 }, { itemId = "OakLog", amount = 2 } },
+		output = { itemId = "IronGreataxe", amount = 1 },
+		professionXp = 70,
+	},
+	OakShield = {
+		id = "OakShield", displayName = "Oak Shield", profession = "Blacksmithing", process = "Forging", minProfessionLevel = 2, learned = true,
+		inputs = { { itemId = "OakLog", amount = 4 }, { itemId = "CopperOre", amount = 2 } },
+		output = { itemId = "OakShield", amount = 1 },
+		professionXp = 30,
+	},
+	ApprenticeRobe = {
+		id = "ApprenticeRobe", displayName = "Apprentice Robe", profession = "Blacksmithing", process = "Forging", minProfessionLevel = 2, learned = true,
+		inputs = { { itemId = "LeatherScraps", amount = 2 }, { itemId = "WolfPelt", amount = 2 } },
+		output = { itemId = "ApprenticeRobe", amount = 1 },
+		professionXp = 30,
+	},
+	IronPickaxe = {
+		id = "IronPickaxe",
+		displayName = "Iron Pickaxe",
+		profession = "Blacksmithing",
+		process = "Forging",
+		minProfessionLevel = 5,
+		learned = true,
+		inputs = { { itemId = "IronOre", amount = 5 }, { itemId = "OakLog", amount = 2 } },
+		output = { itemId = "IronPickaxe", amount = 1 },
+		professionXp = 60,
+	},
+	-- From monster materials (world specification)
+	LeatherJerkin = {
+		id = "LeatherJerkin", displayName = "Leather Jerkin", profession = "Blacksmithing", process = "Forging", minProfessionLevel = 1, learned = true,
+		inputs = { { itemId = "WolfPelt", amount = 2 }, { itemId = "BoarHide", amount = 1 }, { itemId = "LeatherScraps", amount = 1 } },
+		output = { itemId = "LeatherJerkin", amount = 1 },
+		professionXp = 30,
+	},
+	RustyDagger = {
+		id = "RustyDagger", displayName = "Rusty Dagger", profession = "Blacksmithing", process = "Forging", minProfessionLevel = 1, learned = false,
+		inputs = { { itemId = "ScrapMetal", amount = 1 }, { itemId = "WolfFang", amount = 1 } },
+		output = { itemId = "RustyDagger", amount = 1 },
+		professionXp = 20,
+	},
+	IronHelm = {
+		id = "IronHelm", displayName = "Iron Helm", profession = "Blacksmithing", process = "Forging", minProfessionLevel = 3, learned = true,
+		inputs = { { itemId = "IronOre", amount = 2 }, { itemId = "ScrapMetal", amount = 2 } },
+		output = { itemId = "IronHelm", amount = 1 },
+		professionXp = 35,
+	},
+	FangDagger = {
+		id = "FangDagger", displayName = "Fang Dagger", profession = "Blacksmithing", process = "Forging", minProfessionLevel = 5, learned = true,
+		inputs = { { itemId = "AlphaFang", amount = 1 }, { itemId = "IronOre", amount = 2 }, { itemId = "ScrapMetal", amount = 1 } },
+		output = { itemId = "FangDagger", amount = 1 },
+		professionXp = 60, itemLevel = 8,
+	},
+	SignetBlade = {
+		id = "SignetBlade", displayName = "Signet Blade", profession = "Blacksmithing", process = "Forging", minProfessionLevel = 13, learned = true,
+		inputs = { { itemId = "LeaderSignet", amount = 1 }, { itemId = "IronOre", amount = 4 }, { itemId = "ScrapMetal", amount = 3 } },
+		output = { itemId = "SignetBlade", amount = 1 },
+		professionXp = 120, itemLevel = 16,
+	},
+})
