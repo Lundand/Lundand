@@ -1,8 +1,10 @@
 --!strict
--- Buying buildings (L-28, L-54). For-sale signs (parts tagged PropertySign with a PropertyId attribute) open the
--- property window. A purchase follows PropertyOwnership's four steps across the shared record and the buyer's
--- save: reserve, charge, commit, record. Anything interrupted is settled when the buyer next joins: they get
--- the building or their gold back.
+-- Buying buildings (L-28, L-54). For-sale signs (parts tagged PropertySign with a PropertyId attribute) and the
+-- counters of shops for sale open the property window. What a building costs depends on where it stands: its tier's
+-- price moved by the foot traffic of its spot (Domain.PropertyPricing), so a shop on the square costs far more than one
+-- in a back lane. A purchase follows PropertyOwnership's four steps across the shared record and the buyer's save:
+-- reserve, charge, commit, record. Anything interrupted is settled when the buyer next joins: they get the building or
+-- their gold back.
 -- Entering is separate from owning: a house's door leads to its instanced interior (InteriorService), which lets in
 -- anyone while the house is unowned and afterwards only those the owner allows. Owners choose Private, Friends or
 -- Public from the property window; InteriorService shows out anyone no longer allowed.
@@ -14,6 +16,8 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Server = script.Parent.Parent
 local Content = require(Shared.Content)
 local PropertyOwnership = require(Server.Domain.PropertyOwnership)
+local PropertyPricing = require(Server.Domain.PropertyPricing)
+local Layout = require(game:GetService("ServerStorage"):WaitForChild("ServerData").CityLayout)
 local Remotes = require(Server.Net.Remotes)
 local RateLimiter = require(Server.Net.RateLimiter)
 
@@ -39,8 +43,29 @@ local function records(): any
 	return services.SharedRecordService.store(STORE)
 end
 
+-- Each property's foot traffic, from the city layout: it sets the price (Domain.PropertyPricing).
+local traffic: {[string]: number}? = nil
+local function trafficOf(propertyId: string): number?
+	if traffic == nil then
+		local found = {}
+		for _, entry in ipairs(Layout.blocks) do
+			if entry.propertyId ~= nil then
+				found[entry.propertyId] = entry.traffic
+			end
+		end
+		traffic = found
+	end
+	return (traffic :: {[string]: number})[propertyId]
+end
+
 local function priceOf(property: any): number
-	return Content.propertyRules.pricesByTier[property.tier]
+	return PropertyPricing.priceOf(property, trafficOf(property.id), Content.propertyRules)
+end
+
+-- What a property costs where it stands (guild halls use this too).
+function PropertyService.priceOf(propertyId: string): number?
+	local property = Content.world.properties[propertyId]
+	return if property ~= nil then priceOf(property) else nil
 end
 
 local function view(player: Player, propertyId: string): any
@@ -58,6 +83,7 @@ local function view(player: Player, propertyId: string): any
 		kind = KIND_NAMES[property.kind] or property.kind,
 		district = (district and district.displayName) or property.district,
 		price = priceOf(property),
+		traffic = PropertyPricing.trafficLabel(trafficOf(propertyId)),
 		gold = character.currencies.Gold or 0,
 		ownerName = owner and owner.name,
 		readable = readable,
@@ -84,6 +110,13 @@ local function open(player: Player, propertyId: string)
 	if result ~= nil then
 		viewing[player] = propertyId
 		Remotes.get("OpenInterface"):FireClient(player, "Property", result)
+	end
+end
+
+-- Opens a property's window (its deed) for a player standing at it: the deed plaque, or a shop's counter.
+function PropertyService.open(player: Player, propertyId: string)
+	if Content.world.properties[propertyId] ~= nil then
+		open(player, propertyId)
 	end
 end
 
@@ -161,6 +194,9 @@ local function buy(player: Player, propertyId: any)
 		notify(player, "The building is yours.")
 		-- anyone looking round it while it was for sale is shown out: a new home is private
 		services.InteriorService.recheck(propertyId)
+		if property.kind == "Shop" then
+			task.spawn(services.ShopService.refresh, propertyId)
+		end
 	else
 		PropertyService.reconcile(player)
 	end

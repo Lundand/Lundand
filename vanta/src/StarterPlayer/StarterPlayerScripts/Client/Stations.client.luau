@@ -239,6 +239,10 @@ renderProperty = function()
 	local heading = Ui.text(propertyBody, title, 22, Ui.colors.text)
 	heading.FontFace = Ui.fonts.title
 	Ui.text(propertyBody, string.format("%s  ·  %s", view.kind, view.district), 13, Ui.colors.muted)
+	if view.traffic ~= nil then
+		-- how busy the street is: it sets the price, and for a shop, how many customers walk past
+		Ui.text(propertyBody, "Foot traffic: " .. tostring(view.traffic), 13, Ui.colors.muted)
+	end
 	if not view.readable then
 		Ui.text(propertyBody, "The deeds office can't be reached right now. Try again shortly.", 14, Ui.colors.red)
 		return

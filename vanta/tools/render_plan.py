@@ -67,6 +67,8 @@ for e in d["blocks"]:
         col = (100, 100, 105)
     if e.get("use") in WALK_IN:
         col = (205, 120, 80)
+    if e.get("shopfront"):
+        col = (196, 64, 92)
     g.polygon(corners(e), fill=col, outline=(40, 35, 30))
     # door tick
     door = e.get("door")

@@ -280,6 +280,13 @@ function ConfigValidation.validate(content: any): {string}
 		if not Check.isPositiveInteger(propertyRules.pricesByTier[property.tier]) then
 			add("property " .. tostring(key), "has no price for its tier")
 		end
+		local factor = propertyRules.locationFactor[property.kind]
+		if type(factor) ~= "table" or type(factor[1]) ~= "number" or type(factor[2]) ~= "number" or factor[1] <= 0 or factor[2] < factor[1] then
+			add("property " .. tostring(key), "needs a location factor range for its kind")
+		end
+	end
+	if not Check.isPositiveInteger(propertyRules.priceStep) then
+		add("propertyRules.priceStep", "must be a positive whole number")
 	end
 	for key, guild in pairs(world.npcGuilds) do
 		if guild.id ~= key or world.locations[guild.locationId] == nil then

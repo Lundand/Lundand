@@ -77,6 +77,24 @@ function LayoutRules.doorStep(entry: any): {number}
 	return { entry.center[1] + local_[1] * c + local_[2] * s, entry.center[2] - local_[1] * s + local_[2] * c }
 end
 
+-- The strip of street in front of an entry's door side: as wide as that side, `depth` studs out (a shop's counter
+-- and awning stand in it).
+function LayoutRules.frontStrip(entry: any, depth: number): any
+	local hw, hd = entry.size[1] / 2, entry.size[2] / 2
+	local turned = entry.door == "East" or entry.door == "West"
+	local local_ = ({ South = { 0, hd + depth / 2 }, North = { 0, -hd - depth / 2 }, East = { hw + depth / 2, 0 }, West = { -hw - depth / 2, 0 } })[entry.door]
+	local yaw = math.rad(entry.yaw or 0)
+	local c, s = math.cos(yaw), math.sin(yaw)
+	return {
+		center = { entry.center[1] + local_[1] * c + local_[2] * s, entry.center[2] - local_[1] * s + local_[2] * c },
+		size = if turned then { depth, entry.size[2] } else { entry.size[1], depth },
+		yaw = entry.yaw,
+	}
+end
+
+-- How deep the street in front of a shop must be, clear of everything: room for its counter and its customers.
+LayoutRules.SHOP_FRONTAGE = 7
+
 local function wallBounds(layout: any): (number, number, number, number)
 	local b = layout.bounds
 	local inset = layout.walls.thickness / 2
@@ -263,6 +281,35 @@ function LayoutRules.validate(layout: any, world: any, npcs: any): {string}
 			end
 		end
 	end
+	-- a shop has street in front of it for its counter, and every deed names the district its building stands in and
+	-- carries the spot's foot traffic (which sets its price)
+	for _, entry in ipairs(layout.blocks) do
+		if entry.shopfront then
+			local strip = LayoutRules.frontStrip(entry, LayoutRules.SHOP_FRONTAGE)
+			local x0, x1, z0, z1 = LayoutRules.bounds(strip)
+			local blocked = x0 < minX or x1 > maxX or z0 < minZ or z1 > maxZ
+			for _, list in ipairs({ layout.blocks, layout.wallTowers or {} }) do
+				for _, other in ipairs(list) do
+					if other ~= entry and LayoutRules.overlaps(strip, other) then
+						blocked = true
+					end
+				end
+			end
+			if blocked then
+				add(entry.id .. "'s shop counter has no room in the street")
+			end
+		end
+		if entry.propertyId ~= nil then
+			local property = world.properties[entry.propertyId]
+			if property ~= nil and entry.district ~= nil and property.district ~= entry.district then
+				add(entry.id .. " stands in " .. tostring(entry.district) .. " but its deed says " .. tostring(property.district))
+			end
+			if type(entry.traffic) ~= "number" or entry.traffic < 0 or entry.traffic > 1 then
+				add(entry.id .. " has no foot traffic for its price")
+			end
+		end
+	end
+
 	-- the wall's towers stand clear of the streets and of planned open ground (gardens, yards, the wall stairs)
 	for _, tower in ipairs(layout.wallTowers or {}) do
 		register(tower)

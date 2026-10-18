@@ -21,6 +21,7 @@
 --            without one are built in place: public buildings with a ground-floor room you walk into, the rest
 --            (storefronts, warehouses, offices) as closed shells whose door leads to a room sized to the building
 local Table = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared").Util.Table)
+local LayoutRules = require(game:GetService("ServerScriptService"):WaitForChild("Server").Domain.LayoutRules)
 
 local FLOOR_HEIGHT = 12
 local ROOF_ALLOWANCE = 9
@@ -328,10 +329,23 @@ block("CastleGatehouse", 0, -334, 28, 16, 2, { kind = "Gatehouse", use = "Gateho
 block("CityForge", 270, -228, 34, 30, 2, { locationId = "CityForge", door = "East", use = "Forge", style = "Craft", access = "Public", district = "CraftsmanQuarter", open = { East = true, North = true }, name = "City Forge" })
 block("CityApothecary", 326, -228, 26, 28, 2, { locationId = "CityApothecary", door = "West", use = "Apothecary", style = "Craft", access = "Public", district = "CraftsmanQuarter", open = { West = true }, name = "City Apothecary" })
 block("CraftsmensGuild", 330, -296, 36, 34, 3, { locationId = "CraftsmensGuild", door = "West", use = "CraftGuild", style = "Craft", access = "Public", district = "CraftsmanQuarter", open = { West = true, South = true }, name = "Craftsmen's Guild" })
--- Guild halls (L-54): bought by player guilds, each with a planning table inside
-for index, spot in ipairs({ { x = 268, z = -300, door = "East" }, { x = 268, z = -360, door = "East" }, { x = 332, z = -360, door = "West" } }) do
+-- Guild halls (L-54): bought by player guilds, each with a planning table inside. Three in the craftsman quarter and
+-- one or two in every other part of town, on a street; Config/World lists the same districts in the same order.
+local GUILD_HALLS = {
+	{ x = 268, z = -300, door = "East", style = "Craft", district = "CraftsmanQuarter" },
+	{ x = 268, z = -360, door = "East", style = "Craft", district = "CraftsmanQuarter" },
+	{ x = 332, z = -360, door = "West", style = "Craft", district = "CraftsmanQuarter" },
+	{ x = 173, z = -67, door = "North", style = "Market", district = "MerchantSquare" },
+	{ x = -252, z = -67, door = "North", style = "Residential", district = "Residential" },
+	{ x = 129, z = 169, door = "North", style = "Residential", district = "Residential" },
+	{ x = 300, z = -100, door = "East", style = "Harbor", district = "Harbor" },
+	{ x = -278, z = 169, door = "North", style = "Slum", district = "Slums" },
+	{ x = -26, z = -250, door = "East", style = "Residential", district = "Residential" },
+	{ x = 65, z = 127, door = "South", style = "Market", district = "MerchantSquare" },
+}
+for index, spot in ipairs(GUILD_HALLS) do
 	local id = string.format("GuildHall%02d", index)
-	block(id, spot.x, spot.z, 36, 34, 2, { propertyId = id, door = spot.door, use = "GuildHall", style = "Craft", access = "Guild", district = "CraftsmanQuarter", open = { [spot.door] = true } })
+	block(id, spot.x, spot.z, 36, 34, 2, { propertyId = id, door = spot.door, use = "GuildHall", style = spot.style, access = "Guild", district = spot.district, open = { [spot.door] = true } })
 end
 
 -- Player storefronts on the market street just south of the square (L-53, L-54)
@@ -339,7 +353,7 @@ for index = 1, 6 do
 	local side = if index % 2 == 1 then -1 else 1
 	local z = ({ 105, 131, 172 })[math.floor((index - 1) / 2) + 1]
 	local id = string.format("Storefront%02d", index)
-	block(id, side * 22, z, 30, 26, 3, { propertyId = id, door = if side < 0 then "East" else "West", use = "Storefront", style = "Market", access = "Sale", district = "MerchantSquare", open = { [if side < 0 then "East" else "West"] = true } })
+	block(id, side * 22, z, 30, 26, 3, { propertyId = id, door = if side < 0 then "East" else "West", use = "Storefront", style = "Market", access = "Sale", district = "MerchantSquare", open = { [if side < 0 then "East" else "West"] = true }, shopfront = true })
 end
 
 -- Harbour: quay, warehouses, customs, fish market, sailors' tavern; water east of the quay
@@ -460,12 +474,8 @@ local function makeLot(kind: string, district: any, template: any, x0: number, x
 	local id = string.format("%s%03d", kind, generated)
 	local fields: any = { door = door, style = district.style, district = district.district, open = open, template = template.id }
 	fields.use = if kind == "Slum" then "Shack" else "Townhouse"
-	if chance(district.sale) then
-		fields.access = "Sale"
-		fields.propertyId = nextPropertyId(PROPERTY_PREFIX[kind])
-	else
-		fields.access = "Npc"
-	end
+	-- shop, home for sale or an NPC's house: decided once every building stands (see "Foot traffic, shops and deeds")
+	fields.lot = { kind = kind, sale = district.sale }
 	block(id, entry.center[1], entry.center[2], entry.size[1], entry.size[2], template.stories, fields)
 end
 
@@ -586,14 +596,9 @@ do
 			if clear(entry) then
 				ringIndex += 1
 				generated += 1
-				-- tall town houses face the square; every other one can be bought
+				-- tall town houses face the square, the busiest spot in the city: many become shops
 				local fields: any = { yaw = yaw, door = "South", style = "Market", district = "MerchantSquare", open = { South = true, North = true }, template = "RingHouse", use = "Townhouse" }
-				if ringIndex % 2 == 0 then
-					fields.access = "Sale"
-					fields.propertyId = nextPropertyId("MarketHouse")
-				else
-					fields.access = "Npc"
-				end
+				fields.lot = { kind = "Market", sale = 0.5 }
 				block(string.format("SquareRing%02d", ringIndex), x, z, width, depth, 3, fields)
 				angle += halfSpan * 2 + 0.4
 			else
@@ -620,6 +625,68 @@ grid("Residential", -146, 316, 152, 300, { { -88, 6 }, { -44, 5 }, { 52, 5 }, { 
 grid("Harbor", 250, 318, -140, 300, {}, { { -70, 6 }, { 70, 6 }, { 140, 5 }, { 214, 6 } })
 -- Slums: narrow alleys, small lots
 grid("Slum", -460, -152, 152, 300, { { -404, 4 }, { -352, 5 }, { -300, 4 }, { -220, 4 }, { -186, 4 } }, { { 194, 4 }, { 246, 5 } })
+
+--------------------------------------------------------------------------------------------------------------------
+-- Foot traffic, shops and deeds
+--------------------------------------------------------------------------------------------------------------------
+-- How busy a spot on the street is, from 0 (a back lane far from the square) to 1 (a main road by the square). It sets
+-- what a property there costs (Domain.PropertyPricing) and how likely a house there is to be a shop.
+local function trafficAt(x: number, z: number): number
+	local nearSquare = math.clamp((420 - math.sqrt(x * x + z * z)) / 350, 0, 1)
+	local onRoad = 0
+	-- (a door counts as on a road when the road is within 8 studs: across the pavement in front of it)
+	local here = rect(x - 8, x + 8, z - 8, z + 8)
+	for _, road in ipairs(roads) do
+		if overlaps(here, road) then
+			onRoad = math.max(onRoad, if road.width == "Main" then 1 else 0.6)
+		end
+	end
+	return math.floor((0.65 * nearSquare + 0.35 * onRoad) * 100 + 0.5) / 100
+end
+
+-- Is there street enough in front of a building for a shop's counter (clear of every other building and the walls)?
+local function roomForCounter(entry: any): boolean
+	local strip = LayoutRules.frontStrip(entry, LayoutRules.SHOP_FRONTAGE)
+	local inner = BOUNDS
+	local x0, x1, z0, z1 = LayoutRules.bounds(strip)
+	local wall = WALL_THICKNESS / 2
+	if x0 < inner.minX + wall or x1 > inner.maxX - wall or z0 < inner.minZ + wall or z1 > inner.maxZ - wall then
+		return false
+	end
+	for _, list in ipairs({ blocks, WALL_TOWERS }) do
+		for _, other in ipairs(list) do
+			if other ~= entry and LayoutRules.overlaps(strip, other) then
+				return false
+			end
+		end
+	end
+	return true
+end
+
+-- Every lot is now a shop, a home for sale or an NPC's house. The busier its street, the likelier a shop: shops line
+-- the square and the main roads, and a few sit in quieter streets too.
+local SHOP_PREFIX = { Market = "MarketShop", Residential = "TownShop", Royal = "TownShop", Craft = "CraftShop", Harbor = "HarborShop", Slum = "SlumShop" }
+for _, entry in ipairs(blocks) do
+	local step = if entry.door ~= nil then LayoutRules.doorStep(entry) else nil
+	if step ~= nil and (entry.lot ~= nil or entry.propertyId ~= nil) then
+		entry.traffic = trafficAt(step[1], step[2])
+	end
+	local lot = entry.lot
+	if lot ~= nil then
+		entry.lot = nil
+		if roomForCounter(entry) and chance(0.06 + 0.6 * entry.traffic) then
+			entry.use = "Storefront"
+			entry.shopfront = true
+			entry.access = "Sale"
+			entry.propertyId = nextPropertyId(SHOP_PREFIX[lot.kind])
+		elseif chance(lot.sale) then
+			entry.access = "Sale"
+			entry.propertyId = nextPropertyId(PROPERTY_PREFIX[lot.kind])
+		else
+			entry.access = "Npc"
+		end
+	end
+end
 
 --------------------------------------------------------------------------------------------------------------------
 -- People, markers, passages

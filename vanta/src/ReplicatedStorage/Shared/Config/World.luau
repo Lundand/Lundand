@@ -14,13 +14,22 @@ local function addProperties(prefix: string, kind: string, district: string, tie
 end
 -- homes: most ordinary houses in the capital can be bought (one home per player); everyone else can rent an inn room
 addProperties("NobleHouse", "House", "NobleQuarter", "Noble", 9)
-addProperties("TownHouse", "House", "Residential", "Townhouse", 150)
-addProperties("MarketHouse", "House", "MerchantSquare", "Townhouse", 33)
-addProperties("CraftHouse", "House", "CraftsmanQuarter", "Townhouse", 31)
+addProperties("TownHouse", "House", "Residential", "Townhouse", 115)
+addProperties("MarketHouse", "House", "MerchantSquare", "Townhouse", 17)
+addProperties("CraftHouse", "House", "CraftsmanQuarter", "Townhouse", 34)
 addProperties("HarborHouse", "House", "Harbor", "Townhouse", 2)
-addProperties("SlumHouse", "House", "Slums", "Modest", 34)
-addProperties("Storefront", "Shop", "MerchantSquare", "Market", 6) -- player shops (L-53, L-54)
-addProperties("GuildHall", "GuildHall", "CraftsmanQuarter", "Hall", 3) -- one per guild, from guild level 5 (L-54)
+addProperties("SlumHouse", "House", "Slums", "Modest", 17)
+-- player shops (L-53, L-54) on streets all over town, most on the square and the main roads; one per player
+addProperties("Storefront", "Shop", "MerchantSquare", "Market", 6)
+addProperties("MarketShop", "Shop", "MerchantSquare", "Market", 17)
+addProperties("TownShop", "Shop", "Residential", "Market", 29)
+addProperties("CraftShop", "Shop", "CraftsmanQuarter", "Market", 11)
+addProperties("SlumShop", "Shop", "Slums", "Market", 11)
+-- guild halls: one per guild, from guild level 5 (L-54), in the order CityLayout places them
+for index, district in ipairs({ "CraftsmanQuarter", "CraftsmanQuarter", "CraftsmanQuarter", "MerchantSquare", "Residential", "Residential", "Harbor", "Slums", "Residential", "MerchantSquare" }) do
+	local id = string.format("GuildHall%02d", index)
+	properties[id] = { id = id, kind = "GuildHall", district = district, tier = "Hall" }
+end
 
 return Table.deepFreeze({
 	districts = {

@@ -12,6 +12,7 @@ opens to the sea in the east. Each white dot marks a door.
 | Colour | Meaning |
 | --- | --- |
 | blue | Home for sale: a player can buy it |
+| rose | Player shop for sale, with its counter on the street |
 | tan | House or building that isn't for sale |
 | orange | Public building you walk into (guild, inns and taverns, forge, apothecary) |
 | gold | Public landmark (church, fountain, customs house, fish market) |
@@ -25,13 +26,13 @@ opens to the sea in the east. Each white dot marks a door.
 
 | | |
 | --- | --- |
-| Walls | 960 x 840 studs, 30 high, with 26 towers (16 studs square) about every 120 studs |
+| Walls | 960 x 840 studs, 30 high, with 25 towers (16 studs square) about every 120 studs |
 | Gates | South gate to the forest, north gate to the mountain road, sea gate into the harbour |
 | Streets | Main roads 12 to 16 studs, side streets 6 to 8, alleys 4 to 5 |
-| Houses | 373, each 16 to 40 studs wide, one to three storeys, built from 15 house models |
-| Homes for sale | 259 houses; 268 property IDs with the 6 storefronts and 3 guild halls |
-| Public buildings you walk into | 10, plus the church, the keep, the Royal Library and the fish market |
-| Parts | About 13,500, of which 97 cast light |
+| Houses | 356, each 16 to 40 studs wide, one to three storeys, built from 15 house models (68 of them are shops) |
+| For sale | 194 homes, 74 shops and 10 guild halls: 278 property IDs |
+| Public buildings you walk into | 17 (10 of them guild halls), plus the church, the keep, the Royal Library and the fish market |
+| Parts | About 14,000, of which 104 cast light |
 
 ## How the buildings work
 
@@ -62,8 +63,8 @@ room far above the map. Only the few public buildings have a real ground floor y
 ## Districts
 
 - **Merchant Square**: a paved disc 112 studs across with the fountain and the Heart of Realms at its centre. A
-  ring of three-storey houses surrounds it, with the Adventurers' Guild and the Square Inn facing it. Market streets
-  and the six player storefronts run east and south of it.
+  ring of three-storey houses and shops surrounds it, with the Adventurers' Guild and the Square Inn facing it.
+  Market streets lined with shops run east and south of it.
 - **Church**: north-west of the square, reached by a lane from the plaza. It has a nave with pews facing the altar,
   aisles, stained glass, a bell tower, a sacristy and a side chapel. The awakening circle is set into the nave floor;
   new characters appear in the aisle beside it.
@@ -72,23 +73,54 @@ room far above the map. Only the few public buildings have a real ground floor y
   gardens. House Lundand's crest (a silver tower under a gold rift-star on deep blue) appears on banners, gates and
   the throne hall.
 - **Noble quarter**: north-west. Sixteen walled estates with gardens line the noble avenue; nine are for sale.
-- **Old Town**: west and south. Rows of townhouses on streets and lanes.
+- **Old Town**: west and south. Rows of townhouses on streets and lanes, with shops along the busier streets.
 - **Craftsman quarter**: north-east, along the north gate road. The City Forge, the apothecary, the Craftsmen's
-  Guild, the three guild halls, and craftsmen's houses.
+  Guild, three guild halls, and craftsmen's houses and shops.
 - **Harbour**: east. A quay with cranes and cargo, six piers, five ships, warehouses, the customs house, the fish
   market, the Salt and Anchor tavern and the cargo office.
 - **Slums**: south-west, against the wall. Small, low, weathered houses on narrow alleys, with laundry lines and a
   well. The Crooked Lantern tavern hides the way down to the hideout.
 
-## NPCs and shops
+## Shops
 
-The economy is run by players, so the city has no NPC shop buildings. Only two NPCs sell anything, and only what a
-new character needs to start: the Forge Master (copper tools and a starter sword) and the Apothecary (minor health
-potions). The market stalls are decoration. The six storefronts are for players to buy and run.
+The economy is run by players. Only two NPCs sell anything, and only what a new character needs to start: the Forge
+Master (copper tools and a starter sword) and the Apothecary (minor health potions). The market stalls are
+decoration. Everything else is bought and sold in player shops.
+
+- **Where.** 74 shops stand on streets all over town: round the square, along the main roads and the market street,
+  in Old Town, the craftsman quarter and the slums. Every street spot has a foot-traffic score, from 0 for a quiet
+  back lane far from the square to 1 for a main road by the square. The busier the spot, the likelier a house there is
+  a shop. A shop needs 7 studs of clear street in front of it for its counter; `LayoutRules` checks this.
+- **The counter.** Each shop has a counter on the street beside its door, under an awning, with a hanging sign. At an
+  owned shop the counter opens the shop window (`ShopService`): customers buy listings and sell into buy orders, and
+  the owner lists goods and collects earnings. At a shop for sale it opens the deed, to buy it. The counter's prompt and
+  the sign show the owner's name.
+- **The door.** A shop's door leads to its own room, like a house's: the owner's back room, empty for now.
+- **One each.** A player may own one shop and one home.
+
+## Guild halls
+
+Ten guild halls stand around town: three in the craftsman quarter, two by the square, three in Old Town, one at the
+harbour and one in the slums. A guild's leader buys one from the guild treasury once the guild reaches level 5, and
+each guild may have one. A hall's ground floor is a room you walk into, with the guild's planning table in it.
+
+## What things cost
+
+A property's price is its tier's price times a factor set by its spot's foot traffic (`Domain.PropertyPricing`, with
+the ranges in `Config/PropertyRules`). Shops feel their spot most, because they live off passers-by; homes feel it
+least. The window that opens at a deed or a counter shows how busy the spot is.
+
+| Kind | Factor range | Prices now |
+| --- | --- | --- |
+| Shop | 0.5 to 2.5 times 100,000 | 50,000 in a back lane to 236,000 on the square |
+| Guild hall | 0.8 to 1.6 times 150,000 | 155,000 to 203,000 |
+| Home | 0.85 to 1.25 times the tier (25,000, 60,000 or 250,000) | slum houses 21,500 to 27,000, town houses 51,000 to 73,500, mansions about 213,000 |
+
+All prices are placeholders.
 
 ## Owning a home
 
-- **Buying.** Walk up to the deed plaque beside a house's door to see its price and buy it. The purchase uses the
+- **Buying.** Walk up to the deed plaque beside a house's door (or a shop's counter) to see its price and buy it. The purchase uses the
   four-step protocol in `PropertyOwnership`: reserve, charge, commit, record. It is server-checked and safe across
   servers, and an interrupted purchase is settled on the buyer's next join. Each player may own one home and one shop.
 - **One owner.** Each house has one property ID, so only one player can own it, on every server.
@@ -137,11 +169,11 @@ The spawner zones keep their IDs (`HideoutEntrance`, `HideoutHall`, `HideoutInne
 ## Running 50 to 200 players
 
 - **Few parts.** Houses are closed shells of a few dozen parts each. Rooms exist only while someone is in them,
-  so the city is about 13,500 parts.
+  so the city is about 14,000 parts.
 - **Streaming.** The patched place turns on `Workspace.StreamingEnabled`, so each client loads only what is near
   it. Places, NPC anchors and markers live in a model set to stream as Persistent, so quest guidance and prompts
   always find them. Before moving you into or out of a room, the server asks the client to stream that spot in.
-- **Lights.** 97 parts cast light: street lanterns, landmarks and one lamp per public building. Other lamps glow but
+- **Lights.** 104 parts cast light: street lanterns, landmarks and one lamp per public building. Other lamps glow but
   cast no light.
 - **No flicker.** `tools/inspect-city.luau` looks for faces of different parts that lie in the same plane and
   overlap, which flicker on screen. There are none.

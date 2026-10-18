@@ -11,6 +11,11 @@ return Table.deepFreeze({
 		Shop = 1, -- decided: one shop per player (L-54)
 	},
 	pricesByTier = { Noble = 250000, Townhouse = 60000, Modest = 25000, Market = 100000, Hall = 150000 }, -- placeholders (O-10)
+	-- Where a building stands moves its price: the tier price times a factor between these two, by the spot's foot
+	-- traffic (0 a quiet back lane far from the square, 1 on a main road by the square). Shops live off passers-by,
+	-- so their spread is widest. Prices are rounded to priceStep.
+	locationFactor = { Shop = { 0.5, 2.5 }, GuildHall = { 0.8, 1.6 }, House = { 0.85, 1.25 } },
+	priceStep = 500,
 	guildHall = { kind = "GuildHall", perGuild = 1 }, -- the guild level needed is in Config/Guilds
 	reservationSeconds = 120,
 	permissionModes = { Private = true, Friends = true, Public = true },

@@ -225,7 +225,7 @@ local function roofLevels(): {[string]: number}
 			local o = roofs[other]
 			local a, b = roof.box, o.box
 			if o.stories == roof.stories and a[1] < b[2] and b[1] < a[2] and a[3] < b[4] and b[3] < a[4] and LayoutRules.overlaps(roof.footprint, o.footprint) then
-				used[levels[o.id]] = true
+				used[levels[o.id] :: number] = true
 			end
 		end
 		local level = 0
@@ -469,6 +469,12 @@ function CityBuilder.build(options: Options?): Model
 				else
 					warn("[CityBuilder] house model for " .. entry.id .. " has no part named Door")
 				end
+			end
+			if entry.shopfront and entry.propertyId ~= nil then
+				-- a player shop: its counter on the street, where people buy and the owner keeps shop
+				local counter = Shell.shopfront(model, cf, W, D, entry.style or "Residential", 5, entry.seed or 1)
+				counter:SetAttribute("ShopId", entry.propertyId)
+				counter:AddTag("ShopCounter")
 			end
 			sinkRoof(model, roofLevel[entry.id])
 			model:SetAttribute("Access", entry.access or "Npc")

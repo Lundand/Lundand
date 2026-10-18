@@ -189,7 +189,7 @@ function GuildService.hallOffer(player: Player, propertyId: string): any
 		return nil
 	end
 	local rules = Content.guilds
-	local price = Content.propertyRules.pricesByTier[property.tier]
+	local price = services.PropertyService.priceOf(propertyId) :: number
 	local member = record.members[tostring(player.UserId)]
 	local reason = nil
 	if member == nil or not rules.permissions[member.rank].spend then
@@ -211,7 +211,7 @@ function GuildService.buyHall(player: Player, propertyId: any)
 	if not property or property.kind ~= Content.propertyRules.guildHall.kind or guildId == nil then
 		return
 	end
-	local price = Content.propertyRules.pricesByTier[property.tier]
+	local price = services.PropertyService.priceOf(propertyId) :: number
 	local operationId = "hall:" .. newId()
 	local now = os.time()
 	local ok, result = change(guildId, function(record: any)

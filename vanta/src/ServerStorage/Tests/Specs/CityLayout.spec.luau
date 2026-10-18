@@ -3,6 +3,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local ServerStorage = game:GetService("ServerStorage")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local LayoutRules = require(ServerScriptService:WaitForChild("Server").Domain.LayoutRules)
+local PropertyPricing = require(ServerScriptService:WaitForChild("Server").Domain.PropertyPricing)
 local Layout = require(ServerStorage:WaitForChild("ServerData").CityLayout)
 local Table = require(Shared.Util.Table)
 local Content = require(Shared.Content)
@@ -87,6 +88,56 @@ return function(t)
 		t.equal(shops, 0, "no generated NPC shops; the forge and the apothecary sell the starter gear")
 	end)
 
+	t.test("player shops line streets all over town, most of them where people pass", function()
+		local shops, districts, shopTraffic, homeTraffic, homeCount = 0, {}, 0, 0, 0
+		for _, entry in ipairs(Layout.blocks) do
+			if entry.shopfront then
+				shops += 1
+				districts[entry.district] = true
+				shopTraffic += entry.traffic
+				t.equal(Content.world.properties[entry.propertyId].kind, "Shop", entry.id)
+			elseif RESIDENTIAL[entry.use] and entry.traffic ~= nil then
+				homeCount += 1
+				homeTraffic += entry.traffic
+			end
+		end
+		t.truthy(shops >= 40, shops .. " shops")
+		t.truthy(Table.count(districts) >= 4, "shops in " .. Table.count(districts) .. " districts")
+		t.truthy(shopTraffic / shops > homeTraffic / homeCount + 0.1, string.format("shops average %.2f foot traffic, homes %.2f", shopTraffic / shops, homeTraffic / homeCount))
+	end)
+
+	t.test("a shop on a busy street costs more than one in a quiet lane", function()
+		local busy, quiet = nil, nil
+		for _, entry in ipairs(Layout.blocks) do
+			if entry.shopfront then
+				if busy == nil or entry.traffic > busy.traffic then
+					busy = entry
+				end
+				if quiet == nil or entry.traffic < quiet.traffic then
+					quiet = entry
+				end
+			end
+		end
+		local rules = Content.propertyRules
+		local busyPrice = PropertyPricing.priceOf(Content.world.properties[busy.propertyId], busy.traffic, rules)
+		local quietPrice = PropertyPricing.priceOf(Content.world.properties[quiet.propertyId], quiet.traffic, rules)
+		t.truthy(busyPrice >= quietPrice * 3, string.format("%s %d, %s %d", busy.id, busyPrice, quiet.id, quietPrice))
+	end)
+
+	t.test("guild halls stand in every part of town", function()
+		local halls, districts = 0, {}
+		for _, entry in ipairs(Layout.blocks) do
+			if entry.use == "GuildHall" then
+				halls += 1
+				districts[entry.district] = true
+				t.equal(entry.access, "Guild", entry.id)
+				t.equal(Content.world.properties[entry.propertyId].kind, "GuildHall", entry.id)
+			end
+		end
+		t.truthy(halls >= 8, halls .. " halls")
+		t.truthy(Table.count(districts) >= 4, "halls in " .. Table.count(districts) .. " districts")
+	end)
+
 	t.test("houses match their models, and every inn has a room to rent", function()
 		for _, entry in ipairs(Layout.blocks) do
 			if entry.use == "Townhouse" or entry.use == "Shack" or entry.use == "Mansion" then
@@ -166,6 +217,20 @@ return function(t)
 		local problems = LayoutRules.validate(broken, Content.world, Content.npcs)
 		t.truthy(has(problems, "Shed stands in the city wall's " .. tower.id), table.concat(problems, "; "))
 		t.truthy(has(problems, broken.wallTowers[2].id .. " stands in Garden"))
+	end)
+
+	t.test("a shop with no room in the street for its counter is reported", function()
+		local broken = Table.deepCopy(Layout)
+		local shop = nil
+		for _, entry in ipairs(broken.blocks) do
+			if shop == nil and entry.shopfront then
+				shop = entry
+			end
+		end
+		local strip = LayoutRules.frontStrip(shop, 2)
+		table.insert(broken.blocks, { id = "Cart", center = strip.center, size = { 2, 2 }, height = 3 })
+		local problems = LayoutRules.validate(broken, Content.world, Content.npcs)
+		t.truthy(has(problems, shop.id .. "'s shop counter has no room in the street"), table.concat(problems, "; "))
 	end)
 
 	t.test("a house built from another district's model is reported", function()

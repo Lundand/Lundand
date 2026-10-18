@@ -5,6 +5,7 @@
 --   * every room sits on its pivot, fits its slot, and has Entry clear of its walls
 --   * deed plaques read towards the street and hang clear of windows; estate gates line up with the mansion doors
 --   * every public building's doorway is clear, and every inn has its rooms door (clear of windows) and room model
+--   * every shop has its counter on the street, clear of its door, with room for a customer in front
 --   * flicker: no two visible faces of different parts lie in the same plane, facing the same way, overlapping
 -- Prints the problems and a summary; exits 1 if there are any.
 local roblox = require("@lune/roblox")
@@ -209,6 +210,36 @@ for _, d in city:GetDescendants() do
 						problem("deed plaque " .. d.Name .. " hangs over a window")
 						break
 					end
+				end
+			end
+		end
+	end
+end
+
+-- shops: every one has its counter on the street, clear of its door, with room to stand at it
+local countersByShop = {}
+for _, d in city:GetDescendants() do
+	if d:IsA("BasePart") and d:HasTag("ShopCounter") then
+		countersByShop[d:GetAttribute("ShopId")] = d
+	end
+end
+for _, entry in Layout.blocks do
+	if entry.shopfront then
+		local counter = countersByShop[entry.propertyId]
+		local model = models[entry.id]
+		if counter == nil then
+			problem(entry.id .. " is a shop without a counter")
+		elseif model ~= nil then
+			local door = model:FindFirstChild("Door", true)
+			if door ~= nil and boxesOverlap(counter.CFrame, counter.Size + Vector3.new(1, 0, 0), door.CFrame, door.Size + Vector3.new(0, 0, 4), 0) then
+				problem(entry.id .. "'s counter stands in front of its door")
+			end
+			-- a customer standing on the street side of the counter (the building's +z)
+			local front = counter.CFrame * roblox.CFrame.new(0, 1.1, counter.Size.Z / 2 + 1.2)
+			for _, part in partsNear(front.Position) do
+				if part.CanCollide and part ~= counter and boxesOverlap(front, Vector3.new(2, 4.5, 1.2), part.CFrame, part.Size, 0.01) then
+					problem(entry.id .. "'s counter has no room for a customer: " .. part.Name)
+					break
 				end
 			end
 		end

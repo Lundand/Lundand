@@ -1,8 +1,11 @@
 --!strict
--- Player shops (L-53 to L-55). An owned shop building's sign opens its counter. Owners list goods, post buy
--- orders with the gold set aside, take goods back, cancel orders and collect earnings; visitors buy listings and
--- sell into buy orders. Each action sets aside items or gold in the player's save and goes through the outbox to
--- the shop's shared record; the shop's answer settles back into the save.
+-- Player shops (L-53 to L-55). Every shop has a counter on the street (a part tagged ShopCounter): at an owned shop
+-- it opens the shop's window, at one for sale the deed (the property window, to buy it). The counter's prompt and the
+-- shop's hanging sign carry the owner's name. Owners list goods, post buy orders with the gold set aside, take goods
+-- back, cancel orders and collect earnings; visitors buy listings and sell into buy orders. Each action sets aside
+-- items or gold in the player's save and goes through the outbox to the shop's shared record; the shop's answer
+-- settles back into the save.
+local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -16,12 +19,15 @@ local Remotes = require(Server.Net.Remotes)
 local RateLimiter = require(Server.Net.RateLimiter)
 
 local SESSION_SECONDS = 600
+local COUNTER_REACH = 14
 local KINDS = { List = true, Unlist = true, Buy = true, Order = true, Sell = true, Cancel = true, Claim = true }
 
 local ShopService = {}
 local services: any = nil
 local sessions: {[Player]: any} = {}
 local limiter = RateLimiter.new(4, 1, os.clock)
+local counters: {[string]: {BasePart}} = {}
+local toLabel: {string} = {} -- shops whose owner's name is still to be put on their counter
 
 function ShopService.init(allServices: any)
 	services = allServices
@@ -88,11 +94,36 @@ local function send(player: Player, shopId: string)
 	Remotes.get("OpenInterface"):FireClient(player, "ShopCounter", view(player, shopId))
 end
 
-function ShopService.open(player: Player, shopId: any)
-	local property = type(shopId) == "string" and Content.world.properties[shopId]
-	if not property or property.kind ~= "Shop" or not services.PropertyService.isViewing(player, shopId) then
-		return
+-- What a shop's counter and sign say: whose shop it is, or that it is for sale.
+local function label(shopId: string, ownerName: string?)
+	for _, counter in ipairs(counters[shopId] or {}) do
+		local prompt = counter:FindFirstChild("CounterPrompt")
+		if prompt ~= nil and prompt:IsA("ProximityPrompt") then
+			prompt.ObjectText = if ownerName ~= nil then ownerName .. "'s shop" else "Shop for sale"
+			prompt.ActionText = if ownerName ~= nil then "Shop" else "See the deed"
+		end
+		local model = counter.Parent
+		local sign = model and model:FindFirstChild("ShopSign")
+		if sign ~= nil then
+			for _, gui in ipairs(sign:GetChildren()) do
+				local text = gui:FindFirstChildOfClass("TextLabel")
+				if text ~= nil then
+					text.Text = if ownerName ~= nil then ownerName else "Shop"
+				end
+			end
+		end
 	end
+end
+
+-- Reads who owns a shop and labels its counter (call in its own thread: the read can wait on the store).
+function ShopService.refresh(shopId: string)
+	local ok, record = services.SharedRecordService.store("Properties"):read(shopId)
+	if ok then
+		label(shopId, record and record.owner and record.owner.name)
+	end
+end
+
+local function openShop(player: Player, shopId: string)
 	local ok, record = services.SharedRecordService.store("Properties"):read(shopId, 0)
 	if not ok or record == nil or record.owner == nil then
 		notify(player, "This shop has no owner yet.")
@@ -107,7 +138,63 @@ function ShopService.open(player: Player, shopId: any)
 		end)
 	end
 	sessions[player] = { shopId = shopId, untilTime = os.clock() + SESSION_SECONDS }
+	label(shopId, record.owner.name)
 	send(player, shopId)
+end
+
+-- From the property window ("Visit the shop counter").
+function ShopService.open(player: Player, shopId: any)
+	local property = type(shopId) == "string" and Content.world.properties[shopId]
+	if not property or property.kind ~= "Shop" or not services.PropertyService.isViewing(player, shopId) then
+		return
+	end
+	openShop(player, shopId)
+end
+
+-- At the counter: the shop if it has an owner, otherwise its deed to buy it.
+local function useCounter(player: Player, shopId: string, counter: BasePart)
+	local root: any = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not limiter:allow(player) or root == nil or (root.Position - counter.Position).Magnitude > COUNTER_REACH then
+		return
+	end
+	local ok, record = services.SharedRecordService.store("Properties"):read(shopId)
+	if not ok then
+		notify(player, "The shop can't be reached right now. Try again shortly.")
+	elseif record == nil or record.owner == nil then
+		label(shopId, nil)
+		services.PropertyService.open(player, shopId)
+	else
+		openShop(player, shopId)
+	end
+end
+
+local function setupCounter(instance: Instance)
+	local shopId = instance:GetAttribute("ShopId")
+	if not instance:IsA("BasePart") or type(shopId) ~= "string" or instance:FindFirstChild("CounterPrompt") then
+		return
+	end
+	local property = Content.world.properties[shopId]
+	if property == nil or property.kind ~= "Shop" then
+		return
+	end
+	local counter = instance :: BasePart
+	local id = shopId :: string
+	if counters[id] == nil then
+		counters[id] = {}
+		table.insert(toLabel, id)
+	end
+	table.insert(counters[id], counter)
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "CounterPrompt"
+	prompt.ActionText = "Shop"
+	prompt.ObjectText = "Shop"
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = 10
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = counter
+	prompt.Triggered:Connect(function(player: Player)
+		useCounter(player, id, counter)
+	end)
 end
 
 -- The outbox handler: applies the operation to the shop once and returns what the player's save receives.
@@ -163,6 +250,20 @@ end
 function ShopService.start()
 	services.OutboxService.register("Shop", deliver)
 	Remotes.get("ShopRequest").OnServerEvent:Connect(onRequest)
+	for _, counter in ipairs(CollectionService:GetTagged("ShopCounter")) do
+		setupCounter(counter)
+	end
+	CollectionService:GetInstanceAddedSignal("ShopCounter"):Connect(setupCounter)
+	-- name every shop's owner on its counter, one every couple of seconds so the deed store isn't flooded at start
+	task.spawn(function()
+		while true do
+			local shopId = table.remove(toLabel, 1)
+			if shopId ~= nil then
+				pcall(ShopService.refresh, shopId)
+			end
+			task.wait(2)
+		end
+	end)
 	services.PlayerDataService.Releasing:Connect(function(player: Player)
 		sessions[player] = nil
 		limiter:forget(player)
