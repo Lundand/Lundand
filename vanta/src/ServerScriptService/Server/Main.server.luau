@@ -3,9 +3,10 @@
 local Server = script.Parent
 local Remotes = require(Server.Net.Remotes)
 
--- The greybox city builds itself when the place has none yet, so a fresh place file plays straight away.
-if workspace:FindFirstChild("CityGreybox") == nil then
-	require(Server.Tools.GreyboxBuilder).build()
+-- The capital builds itself when the place has none yet, so a fresh place file plays straight away. It pauses
+-- now and then while building; services start once it is done. Build it in Studio and save to skip this.
+if workspace:FindFirstChild("City") == nil then
+	require(Server.Tools.CityBuilder).build({ yield = true })
 end
 
 local ORDER = {

@@ -35,36 +35,36 @@ local function classFor(fileName: string): (string?, string?)
 end
 
 local function load(dir: string, parent: Instance)
+	local initPath, initClass = nil, nil
 	for _, name in fs.readDir(dir) do
 		local path = dir .. "/" .. name
 		if fs.isDir(path) then
-			local existing = parent:FindFirstChild(name)
-			local folder = existing or roblox.Instance.new("Folder")
+			local folder = parent:FindFirstChild(name) or roblox.Instance.new("Folder")
 			folder.Name = name
 			folder.Parent = parent
 			load(path, folder)
 		else
 			local className, base = classFor(name)
-			if className then
-				if base == "init" then
-					-- the folder itself becomes the script
-					local folder = parent
-					local scriptInstance = roblox.Instance.new(className)
-					scriptInstance.Name = folder.Name
-					scriptInstance.Source = fs.readFile(path)
-					for _, child in folder:GetChildren() do
-						child.Parent = scriptInstance
-					end
-					scriptInstance.Parent = folder.Parent
-					folder:Destroy()
-					return
-				end
+			if className and base == "init" then
+				initPath, initClass = path, className
+			elseif className then
 				local scriptInstance = roblox.Instance.new(className)
 				scriptInstance.Name = base
 				scriptInstance.Source = fs.readFile(path)
 				scriptInstance.Parent = parent
 			end
 		end
+	end
+	if initPath then
+		-- an init file turns its folder into the script itself, keeping the children
+		local scriptInstance = roblox.Instance.new(initClass)
+		scriptInstance.Name = parent.Name
+		scriptInstance.Source = fs.readFile(initPath)
+		for _, child in parent:GetChildren() do
+			child.Parent = scriptInstance
+		end
+		scriptInstance.Parent = parent.Parent
+		parent:Destroy()
 	end
 end
 
@@ -129,7 +129,9 @@ local function requireModule(target: any)
 	if typeof(target) ~= "Instance" then
 		error("harness require only takes ModuleScripts, got " .. typeof(target), 2)
 	end
-	local cached = cache[target]
+	-- Lune hands out a new wrapper for an instance on every access, so modules are cached by their path
+	local key = target:GetFullName()
+	local cached = cache[key]
 	if cached ~= nil then
 		return cached.value
 	end
@@ -140,7 +142,7 @@ local function requireModule(target: any)
 	env.require = requireModule
 	local chunk = luau.load(target.Source, { debugName = target:GetFullName(), environment = env, injectGlobals = true })
 	local value = chunk()
-	cache[target] = { value = value }
+	cache[key] = { value = value }
 	return value
 end
 globals.require = requireModule

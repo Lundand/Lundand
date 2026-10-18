@@ -1,7 +1,8 @@
 --!strict
 -- Stable IDs for the capital and its connections (L-27 to L-30). World geometry in Studio carries these
 -- IDs as attributes (LocationId, PropertyId); gameplay never depends on model names or hierarchy.
--- Property counts are placeholders until O-10.
+-- Property counts must match the buildings ServerData.CityLayout generates (LayoutRules and CityLayout.spec check
+-- that every property here is placed exactly once). Prices are placeholders until O-10.
 local Table = require(script.Parent.Parent.Util.Table)
 
 local properties = {}
@@ -11,8 +12,16 @@ local function addProperties(prefix: string, kind: string, district: string, tie
 		properties[id] = { id = id, kind = kind, district = district, tier = tier }
 	end
 end
-addProperties("NobleHouse", "House", "NobleQuarter", "Noble", 4)
-addProperties("SlumHouse", "House", "Slums", "Modest", 8)
+-- homes: most ordinary residential buildings in the capital can be bought (one home per player)
+addProperties("NobleHouse", "House", "NobleQuarter", "Noble", 9)
+addProperties("TownHouse", "House", "Residential", "Townhouse", 127)
+addProperties("MarketHouse", "House", "MerchantSquare", "Townhouse", 6)
+addProperties("CraftHouse", "House", "CraftsmanQuarter", "Townhouse", 20)
+addProperties("SlumHouse", "House", "Slums", "Modest", 32)
+-- flats: one per floor of an apartment building, with a shared stair
+addProperties("TownFlat", "House", "Residential", "Flat", 114)
+addProperties("MarketFlat", "House", "MerchantSquare", "Flat", 21)
+addProperties("CraftFlat", "House", "CraftsmanQuarter", "Flat", 9)
 addProperties("Storefront", "Shop", "MerchantSquare", "Market", 6) -- player shops (L-53, L-54)
 addProperties("GuildHall", "GuildHall", "CraftsmanQuarter", "Hall", 3) -- one per guild, from guild level 5 (L-54)
 
@@ -24,6 +33,8 @@ return Table.deepFreeze({
 		Slums = { id = "Slums", displayName = "The Slums" },
 		CraftsmanQuarter = { id = "CraftsmanQuarter", displayName = "Craftsman Quarter" },
 		CityWalls = { id = "CityWalls", displayName = "City Walls" },
+		Residential = { id = "Residential", displayName = "Old Town" },
+		Harbor = { id = "Harbor", displayName = "The Harbour" },
 	},
 	locations = {
 		HeartOfRealms = { id = "HeartOfRealms", district = "MerchantSquare", kind = "Landmark" }, -- the crystal (docs/LORE.md)
@@ -36,7 +47,7 @@ return Table.deepFreeze({
 		AdventurersGuild = { id = "AdventurersGuild", district = "MerchantSquare", kind = "NpcGuild", guildId = "Adventurers" },
 		ThievesGuildEntrance = {
 			id = "ThievesGuildEntrance",
-			district = "MerchantSquare",
+			district = "Slums",
 			kind = "NpcGuild",
 			guildId = "Thieves",
 			hidden = true,
@@ -46,6 +57,13 @@ return Table.deepFreeze({
 		CityApothecary = { id = "CityApothecary", district = "CraftsmanQuarter", kind = "CraftingFacility", facilityId = "CityAlchemist" },
 		CastleCourtyard = { id = "CastleCourtyard", district = "Castle", kind = "Royal" },
 		ThroneRoom = { id = "ThroneRoom", district = "Castle", kind = "Royal" },
+		RoyalLibrary = { id = "RoyalLibrary", displayName = "Royal Library", district = "Castle", kind = "Library" },
+		HarbourQuay = { id = "HarbourQuay", displayName = "Harbour Quay", district = "Harbor", kind = "Harbor" },
+		CustomsHouse = { id = "CustomsHouse", displayName = "Customs House", district = "Harbor", kind = "Office" },
+		FishMarket = { id = "FishMarket", displayName = "Fish Market", district = "Harbor", kind = "Market" },
+		SailorsTavern = { id = "SailorsTavern", displayName = "The Salt and Anchor", district = "Harbor", kind = "Tavern" },
+		CargoOffice = { id = "CargoOffice", displayName = "Harbour Cargo Office", district = "Harbor", kind = "Office" },
+		CrookedLantern = { id = "CrookedLantern", displayName = "The Crooked Lantern", district = "Slums", kind = "Tavern" },
 		SouthGate = { id = "SouthGate", district = "CityWalls", kind = "CityGate", leadsTo = "SouthernForest" },
 		NorthGate = { id = "NorthGate", district = "CityWalls", kind = "CityGate", leadsTo = "NorthernMountains" },
 	},

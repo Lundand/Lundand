@@ -244,7 +244,22 @@ renderProperty = function()
 		return
 	end
 	if view.ownerName ~= nil then
-		Ui.text(propertyBody, "Owned by " .. tostring(view.ownerName), 15, Ui.colors.silver)
+		Ui.text(propertyBody, if view.isMine then "This is yours." else "Owned by " .. tostring(view.ownerName), 15, Ui.colors.silver)
+		if view.isMine and not view.isShop and view.kind == "Home" then
+			-- who may come inside (the server checks and shows others out)
+			Ui.text(propertyBody, "Who may come in: " .. tostring(view.accessMode), 14, Ui.colors.muted)
+			local row = Ui.row(propertyBody)
+			local propertyId = view.id
+			for _, mode in ipairs(view.accessModes or {}) do
+				local label = if mode == "Private" then "Only me" elseif mode == "Friends" then "My friends" else "Anyone"
+				local button = Ui.button(row, label, function()
+					remotes.PropertyRequest:FireServer("SetAccess", propertyId, mode)
+				end, 120)
+				if mode == view.accessMode then
+					Ui.markSelected(button)
+				end
+			end
+		end
 		if view.isShop then
 			local shopId = view.id
 			Ui.primary(Ui.button(propertyBody, view.isMine and "Open your shop counter" or "Visit the shop counter", function()

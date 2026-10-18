@@ -1,26 +1,157 @@
 --!strict
--- Checks the city greybox layout (L-27) without Studio: unique IDs, everything inside the walls, gates on
--- the wall, no overlapping buildings, no roads through buildings, doors that fit, and every location and
--- property from Config/World placed exactly once. Touching edges are allowed.
+-- Checks the city layout (L-27) without Studio: unique IDs, everything inside the walls, gates on the wall, no
+-- overlapping buildings (footprints may be turned), no roads through buildings, doors that fit, stairs that fit,
+-- every door reachable on foot from the south gate, and every location and property from Config/World placed
+-- exactly once (apartment units count too). Touching edges are allowed; walls and towers of a fortification may
+-- overlap each other.
 local LayoutRules = {}
 
 local SIDES = { North = true, South = true, East = true, West = true }
+local FORTIFICATION = { Wall = true, Tower = true, Gatehouse = true }
+-- buildings CityBuilder.House builds, with stairs inside; they need room for the stair lane and a room beside it
+local STAIRED = { Townhouse = true, Shack = true, Shop = true, Storefront = true, Smithy = true, Tavern = true, SlumTavern = true, Inn = true, Apartments = true, Mansion = true, Warehouse = true, Customs = true, Office = true, Guild = true, CraftGuild = true, GuildHall = true, Forge = true, Apothecary = true, Barracks = true, Chancery = true, Servants = true }
 
-function LayoutRules.bounds(entry: any): (number, number, number, number)
+local function cornersOf(entry: any): {{number}}
 	local x, z = entry.center[1], entry.center[2]
-	local halfWidth, halfDepth = entry.size[1] / 2, entry.size[2] / 2
-	return x - halfWidth, x + halfWidth, z - halfDepth, z + halfDepth
+	local hw, hd = entry.size[1] / 2, entry.size[2] / 2
+	local yaw = math.rad(entry.yaw or 0)
+	local c, s = math.cos(yaw), math.sin(yaw)
+	local out = {}
+	for _, offset in ipairs({ { -hw, -hd }, { hw, -hd }, { hw, hd }, { -hw, hd } }) do
+		table.insert(out, { x + offset[1] * c + offset[2] * s, z - offset[1] * s + offset[2] * c })
+	end
+	return out
+end
+LayoutRules.corners = cornersOf
+
+-- Axis-aligned bounds of an entry's (possibly turned) footprint.
+function LayoutRules.bounds(entry: any): (number, number, number, number)
+	local minX, maxX, minZ, maxZ = math.huge, -math.huge, math.huge, -math.huge
+	for _, p in ipairs(cornersOf(entry)) do
+		minX, maxX = math.min(minX, p[1]), math.max(maxX, p[1])
+		minZ, maxZ = math.min(minZ, p[2]), math.max(maxZ, p[2])
+	end
+	return minX, maxX, minZ, maxZ
 end
 
+-- Separating axis test on the two footprints.
 function LayoutRules.overlaps(a: any, b: any): boolean
-	local aMinX, aMaxX, aMinZ, aMaxZ = LayoutRules.bounds(a)
-	local bMinX, bMaxX, bMinZ, bMaxZ = LayoutRules.bounds(b)
-	return aMinX < bMaxX and bMinX < aMaxX and aMinZ < bMaxZ and bMinZ < aMaxZ
+	local ca, cb = cornersOf(a), cornersOf(b)
+	for _, poly in ipairs({ ca, cb }) do
+		for index = 1, 4 do
+			local p1, p2 = poly[index], poly[index % 4 + 1]
+			local ax, az = p2[2] - p1[2], p1[1] - p2[1]
+			local length = math.sqrt(ax * ax + az * az)
+			ax, az = ax / length, az / length
+			local minA, maxA, minB, maxB = math.huge, -math.huge, math.huge, -math.huge
+			for _, p in ipairs(ca) do
+				local d = p[1] * ax + p[2] * az
+				minA, maxA = math.min(minA, d), math.max(maxA, d)
+			end
+			for _, p in ipairs(cb) do
+				local d = p[1] * ax + p[2] * az
+				minB, maxB = math.min(minB, d), math.max(maxB, d)
+			end
+			if maxA <= minB + 1e-6 or maxB <= minA + 1e-6 then
+				return false
+			end
+		end
+	end
+	return true
 end
 
-local function contains(entry: any, point: {number}): boolean
-	local minX, maxX, minZ, maxZ = LayoutRules.bounds(entry)
-	return point[1] > minX and point[1] < maxX and point[2] > minZ and point[2] < maxZ
+-- Is a world point inside an entry's footprint?
+function LayoutRules.contains(entry: any, point: {number}): boolean
+	local yaw = math.rad(entry.yaw or 0)
+	local c, s = math.cos(yaw), math.sin(yaw)
+	local dx, dz = point[1] - entry.center[1], point[2] - entry.center[2]
+	-- inverse of local (x, z) -> world (x c + z s, -x s + z c)
+	local lx, lz = dx * c - dz * s, dx * s + dz * c
+	return math.abs(lx) < entry.size[1] / 2 and math.abs(lz) < entry.size[2] / 2
+end
+local contains = LayoutRules.contains
+
+-- The point on the street in front of an entry's door (2.5 studs out), in world coordinates.
+function LayoutRules.doorStep(entry: any): {number}
+	local hw, hd = entry.size[1] / 2, entry.size[2] / 2
+	local local_ = ({ South = { 0, hd + 2.5 }, North = { 0, -hd - 2.5 }, East = { hw + 2.5, 0 }, West = { -hw - 2.5, 0 } })[entry.door]
+	local yaw = math.rad(entry.yaw or 0)
+	local c, s = math.cos(yaw), math.sin(yaw)
+	return { entry.center[1] + local_[1] * c + local_[2] * s, entry.center[2] - local_[1] * s + local_[2] * c }
+end
+
+local function wallBounds(layout: any): (number, number, number, number)
+	local b = layout.bounds
+	local inset = layout.walls.thickness / 2
+	return b.minX + inset, b.maxX - inset, b.minZ + inset, b.maxZ - inset
+end
+
+-- Walkable grid of the area inside the walls (cells of `cell` studs): false where a building, landmark or the
+-- harbour water is. Returns a lookup and the grid size.
+function LayoutRules.walkable(layout: any, cell: number): ((number, number) -> boolean, (number, number) -> (number, number))
+	local minX, maxX, minZ, maxZ = wallBounds(layout)
+	local nx, nz = math.floor((maxX - minX) / cell), math.floor((maxZ - minZ) / cell)
+	local blocked: {[number]: boolean} = {}
+	local function index(i: number, j: number): number
+		return j * nx + i
+	end
+	local function toCell(x: number, z: number): (number, number)
+		return math.floor((x - minX) / cell), math.floor((z - minZ) / cell)
+	end
+	local solids = {}
+	for _, entry in ipairs(layout.blocks) do
+		-- a gatehouse is walked through (its passage); everything else is solid ground floor to the street
+		if entry.kind ~= "Gatehouse" then
+			table.insert(solids, entry)
+		end
+	end
+	for _, water in ipairs(layout.water or {}) do
+		table.insert(solids, water)
+	end
+	for _, entry in ipairs(solids) do
+		local x0, x1, z0, z1 = LayoutRules.bounds(entry)
+		local i0, j0 = toCell(x0, z0)
+		local i1, j1 = toCell(x1, z1)
+		for i = math.max(0, i0), math.min(nx - 1, i1) do
+			for j = math.max(0, j0), math.min(nz - 1, j1) do
+				local cx, cz = minX + (i + 0.5) * cell, minZ + (j + 0.5) * cell
+				if contains(entry, { cx, cz }) then
+					blocked[index(i, j)] = true
+				end
+			end
+		end
+	end
+	return function(i: number, j: number): boolean
+		return i >= 0 and j >= 0 and i < nx and j < nz and not blocked[index(i, j)]
+	end, toCell
+end
+
+-- Cells reachable on foot from a world point (4-neighbour flood fill over the walkable grid).
+function LayoutRules.reachableFrom(layout: any, start: {number}, cell: number): (number, number) -> boolean
+	local walkable, toCell = LayoutRules.walkable(layout, cell)
+	local seen: {[string]: boolean} = {}
+	local si, sj = toCell(start[1], start[2])
+	local queue = { { si, sj } }
+	local head = 1
+	if walkable(si, sj) then
+		seen[si .. "," .. sj] = true
+	end
+	while head <= #queue do
+		local i, j = queue[head][1], queue[head][2]
+		head += 1
+		for _, step in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
+			local ni, nj = i + step[1], j + step[2]
+			local key = ni .. "," .. nj
+			if not seen[key] and walkable(ni, nj) then
+				seen[key] = true
+				table.insert(queue, { ni, nj })
+			end
+		end
+	end
+	return function(x: number, z: number): boolean
+		local i, j = toCell(x, z)
+		return seen[i .. "," .. j] == true
+	end
 end
 
 function LayoutRules.validate(layout: any, world: any, npcs: any): {string}
@@ -28,9 +159,17 @@ function LayoutRules.validate(layout: any, world: any, npcs: any): {string}
 	local function add(message: string)
 		table.insert(problems, message)
 	end
-	local limit = layout.walls.halfSize - layout.walls.thickness
+	local minX, maxX, minZ, maxZ = wallBounds(layout)
 	local ids, placedLocations, placedProperties = {}, {}, {}
 
+	local function registerProperty(owner: string, propertyId: any)
+		if world.properties[propertyId] == nil then
+			add(owner .. " uses unknown property " .. tostring(propertyId))
+		elseif placedProperties[propertyId] then
+			add("property " .. propertyId .. " is placed twice")
+		end
+		placedProperties[propertyId] = true
+	end
 	local function register(entry: any)
 		if ids[entry.id] then
 			add("duplicate layout id " .. tostring(entry.id))
@@ -45,18 +184,19 @@ function LayoutRules.validate(layout: any, world: any, npcs: any): {string}
 			placedLocations[entry.locationId] = true
 		end
 		if entry.propertyId ~= nil then
-			if world.properties[entry.propertyId] == nil then
-				add(entry.id .. " uses unknown property " .. tostring(entry.propertyId))
-			elseif placedProperties[entry.propertyId] then
-				add("property " .. entry.propertyId .. " is placed twice")
+			registerProperty(entry.id, entry.propertyId)
+		end
+		for _, unit in ipairs(entry.units or {}) do
+			registerProperty(entry.id, unit.propertyId)
+			if type(unit.floor) ~= "number" or unit.floor < 0 or unit.floor >= (entry.stories or 1) then
+				add(entry.id .. " has a unit on a floor it doesn't have")
 			end
-			placedProperties[entry.propertyId] = true
 		end
 	end
 
 	local function inside(entry: any)
-		local minX, maxX, minZ, maxZ = LayoutRules.bounds(entry)
-		if minX < -limit or maxX > limit or minZ < -limit or maxZ > limit then
+		local x0, x1, z0, z1 = LayoutRules.bounds(entry)
+		if x0 < minX - 1e-6 or x1 > maxX + 1e-6 or z0 < minZ - 1e-6 or z1 > maxZ + 1e-6 then
 			add(entry.id .. " is outside the city walls")
 		end
 	end
@@ -74,6 +214,22 @@ function LayoutRules.validate(layout: any, world: any, npcs: any): {string}
 				add(entry.id .. " is too low for a doorway")
 			end
 		end
+		if STAIRED[entry.use] then
+			if entry.door == nil then
+				add(entry.id .. " is enterable but has no door")
+			else
+				local width, depth = entry.size[1], entry.size[2]
+				if entry.door == "East" or entry.door == "West" then
+					width, depth = depth, width
+				end
+				if (entry.stories or 1) >= 2 and depth < 16 then
+					add(entry.id .. " is too shallow for its stairs")
+				end
+				if width < 11 then
+					add(entry.id .. " is too narrow for a room beside its stairs")
+				end
+			end
+		end
 	end
 	for _, entry in ipairs(layout.roads) do
 		register(entry)
@@ -81,18 +237,20 @@ function LayoutRules.validate(layout: any, world: any, npcs: any): {string}
 	end
 	for _, entry in ipairs(layout.ground) do
 		register(entry)
-		inside(entry)
 	end
+	local b = layout.bounds
 	for _, gate in ipairs(layout.gates) do
 		register(gate)
-		if math.abs(gate.center[1]) ~= layout.walls.halfSize and math.abs(gate.center[2]) ~= layout.walls.halfSize then
+		local x, z = gate.center[1], gate.center[2]
+		if x ~= b.minX and x ~= b.maxX and z ~= b.minZ and z ~= b.maxZ then
 			add(gate.id .. " is not on the city wall")
 		end
 	end
 	for index, entry in ipairs(layout.blocks) do
 		for other = index + 1, #layout.blocks do
-			if LayoutRules.overlaps(entry, layout.blocks[other]) then
-				add(entry.id .. " overlaps " .. layout.blocks[other].id)
+			local second = layout.blocks[other]
+			if not (FORTIFICATION[entry.kind] and FORTIFICATION[second.kind]) and LayoutRules.overlaps(entry, second) then
+				add(entry.id .. " overlaps " .. second.id)
 			end
 		end
 		for _, road in ipairs(layout.roads) do
@@ -101,6 +259,27 @@ function LayoutRules.validate(layout: any, world: any, npcs: any): {string}
 			end
 		end
 	end
+
+	-- every door can be reached on foot from inside the south gate, and so can the other land gates
+	local reachable = LayoutRules.reachableFrom(layout, { 0, maxZ - 12 }, 2)
+	for _, entry in ipairs(layout.blocks) do
+		if entry.door ~= nil and not FORTIFICATION[entry.kind] then
+			local step = LayoutRules.doorStep(entry)
+			if not reachable(step[1], step[2]) then
+				add(entry.id .. "'s door can't be reached from the gates")
+			end
+		end
+	end
+	for _, gate in ipairs(layout.gates) do
+		if gate.kind ~= "Sea" then
+			local x, z = gate.center[1], gate.center[2]
+			local inward = { if x == b.minX then 12 elseif x == b.maxX then -12 else 0, if z == b.minZ then 12 elseif z == b.maxZ then -12 else 0 }
+			if not reachable(x + inward[1], z + inward[2]) then
+				add(gate.id .. " can't be reached from the south gate")
+			end
+		end
+	end
+
 	-- NPCs stand inside their own building, or (for open-air locations) outside every solid block.
 	local placedNpcs = {}
 	for _, placement in ipairs(layout.npcs or {}) do
