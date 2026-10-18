@@ -157,4 +157,27 @@ return function(t)
 		local problems = LayoutRules.validate(broken, Content.world, Content.npcs)
 		t.truthy(has(problems, "SquareInn's door can't be reached from the gates"), table.concat(problems, "; "))
 	end)
+
+	t.test("wall towers keep clear of buildings, streets and open ground", function()
+		local broken = Table.deepCopy(Layout)
+		local tower = broken.wallTowers[1]
+		table.insert(broken.blocks, { id = "Shed", center = { tower.center[1] + 9, tower.center[2] + 9 }, size = { 6, 6 }, height = 10 })
+		table.insert(broken.ground, { id = "Garden", center = { broken.wallTowers[2].center[1], broken.wallTowers[2].center[2] + 9 }, size = { 6, 6 } })
+		local problems = LayoutRules.validate(broken, Content.world, Content.npcs)
+		t.truthy(has(problems, "Shed stands in the city wall's " .. tower.id), table.concat(problems, "; "))
+		t.truthy(has(problems, broken.wallTowers[2].id .. " stands in Garden"))
+	end)
+
+	t.test("a house built from another district's model is reported", function()
+		local broken = Table.deepCopy(Layout)
+		local house = nil
+		for _, entry in ipairs(broken.blocks) do
+			if house == nil and entry.template == "SlumA" then
+				house = entry
+			end
+		end
+		house.style = "Noble"
+		local problems = LayoutRules.validate(broken, Content.world, Content.npcs)
+		t.truthy(has(problems, house.id .. " is in a Noble district but its house model SlumA is Slum"), table.concat(problems, "; "))
+	end)
 end

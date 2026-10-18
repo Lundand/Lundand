@@ -110,10 +110,10 @@ players can rent it at once: each renter gets their own copy. Rooms are small, a
 | The Salt and Anchor | Harbour | 12 x 14 | 25 |
 | The Square Inn | Merchant Square | 14 x 16 | 50 |
 
-Use the Rooms door in the inn's back wall, or at the Square Inn ask the innkeeper. You rent at one inn at a time.
-Renting again there extends the stay, up to 7 days ahead. Gold is taken and the rental made in one step, so you
-never pay without getting the room. While the rental runs, the Rooms door takes you to your room. Prices are
-placeholders.
+The Rooms door in the inn's back wall opens the rental window (at the Square Inn the innkeeper does too). You rent
+at one inn at a time. Paying again there extends the stay, up to 7 days ahead. Gold is taken and the rental made in
+one step, so you never pay without getting the room. While the rental runs, the window at the Rooms door has a
+button that takes you up to your room. Prices are placeholders.
 
 ## The forest and the hideout
 

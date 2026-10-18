@@ -283,9 +283,15 @@ local function enterHouse(player: Player, door: BasePart)
 	local attribute = door:GetAttribute("PropertyId")
 	local propertyId: string? = if type(attribute) == "string" then attribute else nil
 	if propertyId then
+		local before = moves[player]
 		local ok, reason = allowed(player, propertyId, true)
 		if not ok then
 			notify(player, reason or "The door is locked.")
+			return
+		end
+		-- the check can take a moment: go in only if the player is still at this door and hasn't gone elsewhere
+		local again = rootOf(player)
+		if again == nil or (again.Position - door.Position).Magnitude > DOOR_REACH or occupants[player] ~= nil or moves[player] ~= before then
 			return
 		end
 	end
@@ -430,14 +436,17 @@ function InteriorService.start()
 			end
 		end
 	end)
-	services.PlayerDataService.Releasing:Connect(function(player: Player)
+	-- (also on leaving: Releasing only fires for players whose data had loaded)
+	local function forget(player: Player)
 		occupants[player] = nil
 		arrivedAt[player] = nil
 		moves[player] = nil
 		moving[player] = nil
 		friends[player] = nil
 		limiter:forget(player)
-	end)
+	end
+	services.PlayerDataService.Releasing:Connect(forget)
+	Players.PlayerRemoving:Connect(forget)
 end
 
 return InteriorService

@@ -2,8 +2,8 @@
 -- Inn rooms (L-29): every player can have somewhere to stay. Each inn rents one kind of room, the same for as many
 -- players as want it, and each renter gets their own instanced copy (InteriorService). Rooms are small and get
 -- bigger and dearer with the inn: the Crooked Lantern in the slums, the Salt and Anchor at the harbour, the Square
--- Inn. The Innkeeper's "I'd like a room" and each inn's rooms door (a part tagged InnRooms) open the rental window;
--- with a rental running, the door takes you to your room. Renting follows Domain.Rentals: gold is taken and the
+-- Inn. The Innkeeper's "I'd like a room" and each inn's rooms door (a part tagged InnRooms) open the rental window,
+-- where you rent, pay for more nights, or (at the door, with a rental running) go up to your room. Renting follows Domain.Rentals: gold is taken and the
 -- rental made or extended in one step, so nobody pays without getting the room. Each request is a new payment.
 local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
@@ -122,9 +122,10 @@ local function setupDoor(instance: Instance)
 	prompt.MaxActivationDistance = 8
 	prompt.RequiresLineOfSight = true -- not through the back wall from the street
 	prompt.Parent = door
+	-- the door opens the rental window: rent or pay for more nights there, or go up to your room
 	prompt.Triggered:Connect(function(player: Player)
-		if limiter:allow(player) then
-			goToRoom(player, innId)
+		if limiter:allow(player) and nearDoor(player, innId) then
+			RentalService.open(player, innId)
 		end
 	end)
 end
