@@ -1,16 +1,13 @@
 --!strict
 -- Checks the city layout (L-27) without Studio: unique IDs, everything inside the walls, gates on the wall, no
--- overlapping buildings (footprints may be turned), no roads through buildings, doors that fit, stairs that fit,
--- every door reachable on foot from the south gate, and every location and property from Config/World placed
--- exactly once (apartment units count too). Touching edges are allowed; walls and towers of a fortification may
--- overlap each other.
+-- overlapping buildings (footprints may be turned), no roads or wall towers through buildings, doors that fit, houses
+-- that match their house model, every door reachable on foot from the south gate, and every location and property
+-- from Config/World placed exactly once. Touching edges are allowed; walls and towers of a fortification may overlap
+-- each other.
 local LayoutRules = {}
 
 local SIDES = { North = true, South = true, East = true, West = true }
 local FORTIFICATION = { Wall = true, Tower = true, Gatehouse = true }
--- buildings CityBuilder.House builds, with stairs inside; they need room for the stair lane and a room beside it
-local STAIRED = { Townhouse = true, Shack = true, Shop = true, Storefront = true, Smithy = true, Tavern = true, SlumTavern = true, Inn = true, Apartments = true, Mansion = true, Warehouse = true, Customs = true, Office = true, Guild = true, CraftGuild = true, GuildHall = true, Forge = true, Apothecary = true, Barracks = true, Chancery = true, Servants = true }
-
 local function cornersOf(entry: any): {{number}}
 	local x, z = entry.center[1], entry.center[2]
 	local hw, hd = entry.size[1] / 2, entry.size[2] / 2
@@ -108,6 +105,9 @@ function LayoutRules.walkable(layout: any, cell: number): ((number, number) -> b
 	for _, water in ipairs(layout.water or {}) do
 		table.insert(solids, water)
 	end
+	for _, tower in ipairs(layout.wallTowers or {}) do
+		table.insert(solids, tower)
+	end
 	for _, entry in ipairs(solids) do
 		local x0, x1, z0, z1 = LayoutRules.bounds(entry)
 		local i0, j0 = toCell(x0, z0)
@@ -186,12 +186,6 @@ function LayoutRules.validate(layout: any, world: any, npcs: any): {string}
 		if entry.propertyId ~= nil then
 			registerProperty(entry.id, entry.propertyId)
 		end
-		for _, unit in ipairs(entry.units or {}) do
-			registerProperty(entry.id, unit.propertyId)
-			if type(unit.floor) ~= "number" or unit.floor < 0 or unit.floor >= (entry.stories or 1) then
-				add(entry.id .. " has a unit on a floor it doesn't have")
-			end
-		end
 	end
 
 	local function inside(entry: any)
@@ -214,20 +208,22 @@ function LayoutRules.validate(layout: any, world: any, npcs: any): {string}
 				add(entry.id .. " is too low for a doorway")
 			end
 		end
-		if STAIRED[entry.use] then
-			if entry.door == nil then
-				add(entry.id .. " is enterable but has no door")
+		if entry.template ~= nil then
+			-- a house built from a model must have the model's footprint (facade along its door side)
+			local template = (layout.templates or {})[entry.template]
+			if template == nil then
+				add(entry.id .. " uses unknown house model " .. tostring(entry.template))
 			else
 				local width, depth = entry.size[1], entry.size[2]
 				if entry.door == "East" or entry.door == "West" then
 					width, depth = depth, width
 				end
-				if (entry.stories or 1) >= 2 and depth < 16 then
-					add(entry.id .. " is too shallow for its stairs")
+				if math.abs(width - template.w) > 1e-6 or math.abs(depth - template.d) > 1e-6 or entry.stories ~= template.stories then
+					add(entry.id .. " doesn't match its house model " .. entry.template)
 				end
-				if width < 11 then
-					add(entry.id .. " is too narrow for a room beside its stairs")
-				end
+			end
+			if entry.door == nil then
+				add(entry.id .. " has a house model but no door")
 			end
 		end
 	end
@@ -256,6 +252,11 @@ function LayoutRules.validate(layout: any, world: any, npcs: any): {string}
 		for _, road in ipairs(layout.roads) do
 			if LayoutRules.overlaps(entry, road) then
 				add(road.id .. " runs through " .. entry.id)
+			end
+		end
+		for _, tower in ipairs(layout.wallTowers or {}) do
+			if LayoutRules.overlaps(entry, tower) then
+				add(entry.id .. " stands in the city wall's " .. tower.id)
 			end
 		end
 	end

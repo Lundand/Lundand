@@ -3,35 +3,29 @@
 -- property window. A purchase follows PropertyOwnership's four steps across the shared record and the buyer's
 -- save: reserve, charge, commit, record. Anything interrupted is settled when the buyer next joins: they get
 -- the building or their gold back.
--- Entering is separate from owning: the city's property volumes (parts tagged PropertyVolume, built by CityBuilder)
--- are checked twice a second, and anyone inside an owned home its owner hasn't opened to them is shown out to the
--- door. Owners choose Private, Friends or Public from the property window.
+-- Entering is separate from owning: a house's door leads to its instanced interior (InteriorService), which lets in
+-- anyone while the house is unowned and afterwards only those the owner allows. Owners choose Private, Friends or
+-- Public from the property window; InteriorService shows out anyone no longer allowed.
 local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Server = script.Parent.Parent
 local Content = require(Shared.Content)
 local PropertyOwnership = require(Server.Domain.PropertyOwnership)
-local PropertyAccess = require(Server.Domain.PropertyAccess)
 local Remotes = require(Server.Net.Remotes)
 local RateLimiter = require(Server.Net.RateLimiter)
 
 local STORE = "Properties"
 local SIGN_DISTANCE = 12
 local KIND_NAMES = { House = "Home", Shop = "Shop", GuildHall = "Guild hall" }
-local ACCESS_INTERVAL = 0.5
 local ACCESS_MODES = { "Private", "Friends", "Public" }
 
 local PropertyService = {}
 local services: any = nil
 local limiter = RateLimiter.new(6, 1, os.clock)
 local viewing: {[Player]: string} = {}
-local volumes = PropertyAccess.newIndex(64)
-local friendCache: {[Player]: {[number]: boolean}} = {}
-local lastWarned: {[Player]: number} = {}
 
 function PropertyService.init(allServices: any)
 	services = allServices
@@ -193,89 +187,11 @@ local function setAccess(player: Player, propertyId: any, mode: any)
 	end)
 	if ok and answer == true then
 		notify(player, "Your home is now " .. string.lower(tostring(mode)) .. ".")
+		services.InteriorService.recheck(propertyId)
 	else
 		notify(player, "Couldn't change who may enter: " .. tostring(answer))
 	end
 	open(player, propertyId)
-end
-
--- Is this player one of the owner's Roblox friends? nil until known (looked up once per pair, off the loop).
-local function friendship(player: Player, ownerId: number): boolean?
-	local known = friendCache[player]
-	if known == nil then
-		known = {}
-		friendCache[player] = known
-	end
-	local cached = known[ownerId]
-	if cached ~= nil then
-		return cached
-	end
-	known[ownerId] = false
-	task.spawn(function()
-		local ok, isFriend = pcall(function()
-			return player:IsFriendsWith(ownerId)
-		end)
-		if friendCache[player] ~= nil then
-			friendCache[player][ownerId] = ok and isFriend == true
-		end
-	end)
-	return nil
-end
-
-local function addVolume(instance: Instance)
-	local propertyId = instance:GetAttribute("PropertyId")
-	if not instance:IsA("BasePart") or type(propertyId) ~= "string" or Content.world.properties[propertyId] == nil then
-		return
-	end
-	local part = instance :: BasePart
-	local cf, size = part.CFrame, part.Size
-	local half = size / 2
-	-- axis-aligned bounds of the (possibly turned) box for the grid, the exact test in its own frame
-	local extent = Vector3.new(
-		math.abs(cf.RightVector.X) * half.X + math.abs(cf.UpVector.X) * half.Y + math.abs(cf.LookVector.X) * half.Z,
-		half.Y,
-		math.abs(cf.RightVector.Z) * half.X + math.abs(cf.UpVector.Z) * half.Y + math.abs(cf.LookVector.Z) * half.Z
-	)
-	local exit = part:GetAttribute("Exit")
-	volumes:add({
-		propertyId = propertyId,
-		minX = cf.Position.X - extent.X,
-		maxX = cf.Position.X + extent.X,
-		minZ = cf.Position.Z - extent.Z,
-		maxZ = cf.Position.Z + extent.Z,
-		minY = cf.Position.Y - half.Y,
-		maxY = cf.Position.Y + half.Y,
-		exit = if typeof(exit) == "Vector3" then exit else cf.Position,
-		contains = function(x: number, y: number, z: number): boolean
-			local offset = cf:PointToObjectSpace(Vector3.new(x, y, z))
-			return math.abs(offset.X) <= half.X and math.abs(offset.Y) <= half.Y and math.abs(offset.Z) <= half.Z
-		end,
-	} :: any)
-end
-
--- Shows anyone out of an owned home they may not be in. Unowned homes stay open for viewing.
-local function enforceAccess()
-	for _, player in ipairs(Players:GetPlayers()) do
-		local root: any = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-		if root ~= nil then
-			local p = root.Position
-			for _, volume: any in ipairs(volumes:query(p.X, p.Y, p.Z)) do
-				local readable, record = records():read(volume.propertyId)
-				if readable and record ~= nil and record.owner ~= nil then
-					local isFriend = if record.permissions and record.permissions.mode == "Friends" then friendship(player, record.owner.userId) else false
-					if PropertyAccess.shouldEject(record, player.UserId, isFriend) then
-						player.Character:PivotTo(CFrame.new(volume.exit + Vector3.new(0, 3, 0)))
-						local now = os.clock()
-						if now - (lastWarned[player] or 0) > 4 then
-							lastWarned[player] = now
-							notify(player, "That home belongs to " .. tostring(record.owner.name) .. ". It's private.")
-						end
-						break
-					end
-				end
-			end
-		end
-	end
 end
 
 local function setupSign(sign: Instance)
@@ -304,19 +220,6 @@ function PropertyService.start()
 		setupSign(sign)
 	end
 	CollectionService:GetInstanceAddedSignal("PropertySign"):Connect(setupSign)
-	for _, part in ipairs(CollectionService:GetTagged("PropertyVolume")) do
-		addVolume(part)
-	end
-	CollectionService:GetInstanceAddedSignal("PropertyVolume"):Connect(addVolume)
-	task.spawn(function()
-		while true do
-			task.wait(ACCESS_INTERVAL)
-			local ok, err: any = pcall(enforceAccess)
-			if not ok then
-				warn("[PropertyService] access check failed: " .. tostring(err))
-			end
-		end
-	end)
 	Remotes.get("PropertyRequest").OnServerEvent:Connect(function(player: Player, action: any, propertyId: any, mode: any)
 		if action == "Buy" and limiter:allow(player) then
 			buy(player, propertyId)
@@ -332,8 +235,6 @@ function PropertyService.start()
 	end)
 	services.PlayerDataService.Releasing:Connect(function(player: Player)
 		viewing[player] = nil
-		friendCache[player] = nil
-		lastWarned[player] = nil
 		limiter:forget(player)
 	end)
 end

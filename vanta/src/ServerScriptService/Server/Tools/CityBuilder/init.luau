@@ -1,8 +1,13 @@
 --!strict
--- Builds the capital from ServerData.CityLayout (L-27): ground and roads, city walls and gates, every building with
--- its interior, the castle and its library, the church, the harbour, the forest beyond the south gate and the
--- thieves' hideout under the slums. Places carry LocationId / PropertyId attributes, so gameplay finds them by ID,
--- never by name or hierarchy; NPC anchors, markers, property signs and access volumes are tagged as before.
+-- Builds the capital from ServerData.CityLayout (L-27): ground, city walls and gates, the houses, the public
+-- buildings, the castle and its library, the church, the harbour, the forest beyond the south gate and the thieves'
+-- hideout under the slums. Places carry LocationId / PropertyId attributes, so gameplay finds them by ID, never by
+-- name or hierarchy; NPC anchors, markers and property signs are tagged as before.
+--
+-- Houses are clones of a few house models (ServerStorage.CityAssets.Houses), painted per house; their doors (tagged
+-- HouseDoor) lead to interiors InteriorService builds from ServerStorage.CityAssets.Interiors while someone is
+-- inside. Both folders are filled with default models the first time; edit or replace a model there in Studio and
+-- every house built from it follows (keep a part named "Door" on a house, and "Entry" and "ExitDoor" in a room).
 --
 -- The server builds the city at start when Workspace has none (Server/Main). To keep it in the place instead, run
 -- in Studio edit mode (for example through the MCP server's execute_luau) and save:
@@ -11,10 +16,12 @@
 local ServerStorage = game:GetService("ServerStorage")
 local Content = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared").Content)
 local Layout = require(ServerStorage:WaitForChild("ServerData").CityLayout)
+local LayoutRules = require(script.Parent.Parent.Domain.LayoutRules)
 
 local Kit = require(script.Kit)
 local Furniture = require(script.Furniture)
-local House = require(script.House)
+local Shell = require(script.Shell)
+local Interior = require(script.Interior)
 local Landmarks = require(script.Landmarks)
 local Outdoors = require(script.Outdoors)
 local Forest = require(script.Forest)
@@ -34,6 +41,117 @@ local LANDMARKS: {[string]: (any, Instance) -> Model} = {
 	Gatehouse = Landmarks.castleGatehouse,
 	FishMarket = Landmarks.fishMarket,
 }
+
+-- Public buildings you walk into; every other building is a closed shell with an instanced interior.
+local PUBLIC = { Inn = true, Guild = true, Forge = true, Apothecary = true, CraftGuild = true, GuildHall = true, SlumTavern = true, Tavern = true }
+CityBuilder.PUBLIC = PUBLIC
+
+local function folderIn(parent: Instance, name: string): Folder
+	local existing = parent:FindFirstChild(name)
+	if existing and existing:IsA("Folder") then
+		return existing
+	end
+	local folder = Instance.new("Folder")
+	folder.Name = name
+	folder.Parent = parent
+	return folder
+end
+
+local function assetFolder(name: string): Folder
+	return folderIn(folderIn(ServerStorage, "CityAssets"), name)
+end
+
+-- The interior a building's door leads to: its house model's room, or a room sized to the building.
+function CityBuilder.interiorKey(entry: any): string
+	if entry.template ~= nil then
+		return entry.template
+	end
+	local _, W, D = Shell.frameOf(entry)
+	return string.format("Room%dx%d", math.floor(W), math.floor(D))
+end
+
+-- The house model for a template, built (and kept in CityAssets) the first time it is needed.
+local function houseModel(templateId: string): Model
+	local folder = assetFolder("Houses")
+	local existing = folder:FindFirstChild(templateId)
+	if existing ~= nil and existing:IsA("Model") then
+		return existing
+	end
+	local t = Layout.templates[templateId]
+	local model = Instance.new("Model")
+	model.Name = templateId
+	Shell.build(model, CFrame.new(), { W = t.w, D = t.d, stories = t.stories, roof = t.roof, style = "Residential", floorHeight = Layout.floorHeight })
+	model.WorldPivot = CFrame.new()
+	model.Parent = folder
+	return model
+end
+
+local function ensureInterior(key: string, width: number, depth: number, style: string?)
+	local folder = assetFolder("Interiors")
+	if folder:FindFirstChild(key) == nil then
+		local room = Interior.build(key, width, depth, style)
+		room.WorldPivot = CFrame.new()
+		room.Parent = folder
+	end
+end
+
+-- A deed plaque on the wall beside a door (PropertyService gives it the View prompt). It hangs on the building's own
+-- facade, so two neighbours' plaques never meet.
+local function deedSign(properties: Instance, propertyId: string, door: CFrame, doorWidth: number)
+	local f = Kit.frame(properties, door)
+	local sign = f:box(propertyId .. "Sign", Vector3.new(2.6, 1.8, 0.3), doorWidth / 2 + 1.8, 5.2, 0.45, rgb(214, 196, 150), Enum.Material.WoodPlanks, { collide = false, query = false })
+	sign:SetAttribute("PropertyId", propertyId)
+	sign:AddTag("PropertySign")
+	Kit.sign(sign, Enum.NormalId.Front, "Deed: " .. propertyId, rgb(60, 40, 20))
+end
+
+local BACK_OF = { South = "North", North = "South", East = "West", West = "East" }
+
+-- Is a point on the ground inside some other building or a wall tower? (a coarse grid over the layout's footprints)
+local function obstacleLookup(): (Vector3, any) -> boolean
+	local CELL = 32
+	local cells: {[string]: {any}} = {}
+	local function add(entry: any)
+		local x0, x1, z0, z1 = LayoutRules.bounds(entry)
+		for i = math.floor(x0 / CELL), math.floor(x1 / CELL) do
+			for j = math.floor(z0 / CELL), math.floor(z1 / CELL) do
+				local key = i .. ":" .. j
+				cells[key] = cells[key] or {}
+				table.insert(cells[key], entry)
+			end
+		end
+	end
+	for _, entry in ipairs(Layout.blocks) do
+		add(entry)
+	end
+	for _, tower in ipairs(Layout.wallTowers) do
+		add(tower)
+	end
+	return function(point: Vector3, self: any): boolean
+		for _, other in ipairs(cells[math.floor(point.X / CELL) .. ":" .. math.floor(point.Z / CELL)] or {}) do
+			if other ~= self and LayoutRules.contains(other, { point.X, point.Z }) then
+				return true
+			end
+		end
+		return false
+	end
+end
+
+-- A house model has windows front and back. Where the back of the lot meets a neighbour or a wall they go, and so
+-- does any window with another building or a wall tower right in front of it.
+local function closeWindows(model: Model, cf: CFrame, entry: any, blocked: (Vector3, any) -> boolean)
+	local open = entry.open or {}
+	local backOpen = open[BACK_OF[entry.door or "South"]] == true
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") and part.Name == "Window" then
+			local p = cf:PointToObjectSpace(part.CFrame.Position)
+			local outward = if p.Z > 0 then 1 else -1
+			if (p.Z < 0 and not backOpen) or blocked(cf:PointToWorldSpace(Vector3.new(p.X, p.Y, p.Z + outward)), entry) then
+				part:Destroy()
+			end
+		end
+	end
+end
 
 -- Parts left by earlier versions of the map: the greybox, and the hand-placed forest and hideout it replaces.
 local function removeOld(parent: Instance)
@@ -133,6 +251,12 @@ function CityBuilder.build(options: Options?): Model
 	Outdoors.walls(Layout, root)
 
 	local byDistrict: {[string]: Folder} = {}
+	local blocked = obstacleLookup()
+	local innByLocation = {}
+	for innId, inn in pairs(Content.world.inns) do
+		innByLocation[inn.locationId] = innId
+		ensureInterior("InnRoom_" .. innId, inn.room[1], inn.room[2], inn.style)
+	end
 	for _, entry in ipairs(Layout.blocks) do
 		local builder = LANDMARKS[entry.use]
 		if builder ~= nil then
@@ -143,7 +267,62 @@ function CityBuilder.build(options: Options?): Model
 			local district = entry.district or "City"
 			local folder = byDistrict[district] or Kit.folder(districts, district)
 			byDistrict[district] = folder
-			House.build(entry, Layout, folder, properties)
+			local cf, W, D = Shell.frameOf(entry)
+			local model
+			if PUBLIC[entry.use] then
+				-- a public building: a real ground-floor room behind an open doorway
+				model = Kit.model(folder, entry.id)
+				Kit.lightBudget = 1
+				Shell.build(model, cf, { W = W, D = D, stories = entry.stories, roof = if W <= 24 then "Gable" else "Eaves", style = entry.style or "Residential", hollow = true, trapdoor = entry.trapdoor, floorHeight = Layout.floorHeight })
+				Kit.lightBudget = math.huge
+				local innId = innByLocation[entry.locationId]
+				if innId ~= nil then
+					-- the door to the rented rooms, in the back wall
+					local roomsDoor = Kit.part(model, "RoomsDoor", Vector3.new(5, 8.4, 0.4), cf * CFrame.new(-W / 6, 0.6 + 4.2, -D / 2 + 1.2), rgb(84, 58, 38), Enum.Material.WoodPlanks)
+					roomsDoor:SetAttribute("InnId", innId)
+					roomsDoor:AddTag("InnRooms")
+				end
+				if entry.propertyId ~= nil then
+					deedSign(properties, entry.propertyId, cf * CFrame.new(if W >= 18 then -W / 6 else 0, 0.6, D / 2), 6)
+				end
+			else
+				-- a house: a painted clone of its model (or a shell sized to it), the door leading to its interior
+				if entry.template ~= nil then
+					model = houseModel(entry.template):Clone()
+					model.Name = entry.id
+					model:PivotTo(cf)
+					model.Parent = folder
+				else
+					model = Kit.model(folder, entry.id)
+					Shell.build(model, cf, { W = W, D = D, stories = entry.stories, roof = if W <= 24 then "Gable" else "Eaves", style = entry.style or "Residential", floorHeight = Layout.floorHeight })
+				end
+				Shell.paint(model, entry.style or "Residential", entry.seed or 1)
+				closeWindows(model, cf, entry, blocked)
+				local key = CityBuilder.interiorKey(entry)
+				ensureInterior(key, W - 2, D - 2, entry.style)
+				local door = model:FindFirstChild("Door", true)
+				if door ~= nil and door:IsA("BasePart") then
+					door:SetAttribute("HouseId", entry.id)
+					door:SetAttribute("Interior", key)
+					door:SetAttribute("DisplayName", entry.name or (if entry.propertyId then "Home" else "House"))
+					if entry.propertyId ~= nil then
+						door:SetAttribute("PropertyId", entry.propertyId)
+						-- the door's frame, at its sill on the wall's face
+						deedSign(properties, entry.propertyId, door.CFrame * CFrame.new(0, -door.Size.Y / 2, -door.Size.Z / 2), door.Size.X)
+					end
+					door:AddTag("HouseDoor")
+				else
+					warn("[CityBuilder] house model for " .. entry.id .. " has no part named Door")
+				end
+			end
+			model:SetAttribute("Access", entry.access or "Npc")
+			model:SetAttribute("Use", entry.use or "Townhouse")
+			if entry.locationId then
+				model:SetAttribute("LocationId", entry.locationId)
+			end
+			if entry.propertyId then
+				model:SetAttribute("PropertyId", entry.propertyId)
+			end
 		end
 	end
 	Outdoors.estates(Layout, root)
@@ -222,7 +401,7 @@ function CityBuilder.build(options: Options?): Model
 		local m = Kit.frame(outer, CFrame.new(x, -2, -1180 - (index % 3) * 40))
 		m:wedgeAt("Mountain", Vector3.new(170, h, 120), CFrame.new(0, h / 2, 60) * CFrame.Angles(0, math.pi, 0), rgb(120, 118, 116), Enum.Material.Rock, { collide = false, query = false })
 		m:wedgeAt("Mountain", Vector3.new(170, h, 120), CFrame.new(0, h / 2, -60), rgb(110, 108, 106), Enum.Material.Rock, { collide = false, query = false })
-		m:wedgeAt("SnowCap", Vector3.new(60, h * 0.25, 40), CFrame.new(0, h * 0.88, 20) * CFrame.Angles(0, math.pi, 0), rgb(240, 242, 246), Enum.Material.Snow, { collide = false, query = false })
+		m:wedgeAt("SnowCap", Vector3.new(60, h * 0.25, 39), CFrame.new(0, h * 0.88, 20.5) * CFrame.Angles(0, math.pi, 0), rgb(240, 242, 246), Enum.Material.Snow, { collide = false, query = false })
 	end
 	local edges = Kit.folder(root, "Boundaries")
 	local water = Layout.water[1]

@@ -12,16 +12,13 @@ local function addProperties(prefix: string, kind: string, district: string, tie
 		properties[id] = { id = id, kind = kind, district = district, tier = tier }
 	end
 end
--- homes: most ordinary residential buildings in the capital can be bought (one home per player)
+-- homes: most ordinary houses in the capital can be bought (one home per player); everyone else can rent an inn room
 addProperties("NobleHouse", "House", "NobleQuarter", "Noble", 9)
-addProperties("TownHouse", "House", "Residential", "Townhouse", 127)
-addProperties("MarketHouse", "House", "MerchantSquare", "Townhouse", 6)
-addProperties("CraftHouse", "House", "CraftsmanQuarter", "Townhouse", 20)
-addProperties("SlumHouse", "House", "Slums", "Modest", 32)
--- flats: one per floor of an apartment building, with a shared stair
-addProperties("TownFlat", "House", "Residential", "Flat", 114)
-addProperties("MarketFlat", "House", "MerchantSquare", "Flat", 21)
-addProperties("CraftFlat", "House", "CraftsmanQuarter", "Flat", 9)
+addProperties("TownHouse", "House", "Residential", "Townhouse", 150)
+addProperties("MarketHouse", "House", "MerchantSquare", "Townhouse", 33)
+addProperties("CraftHouse", "House", "CraftsmanQuarter", "Townhouse", 31)
+addProperties("HarborHouse", "House", "Harbor", "Townhouse", 2)
+addProperties("SlumHouse", "House", "Slums", "Modest", 34)
 addProperties("Storefront", "Shop", "MerchantSquare", "Market", 6) -- player shops (L-53, L-54)
 addProperties("GuildHall", "GuildHall", "CraftsmanQuarter", "Hall", 3) -- one per guild, from guild level 5 (L-54)
 
@@ -72,8 +69,12 @@ return Table.deepFreeze({
 		Craftsmen = { id = "Craftsmen", displayName = "Craftsmen's Guild", locationId = "CraftsmensGuild" },
 		Thieves = { id = "Thieves", displayName = "(hidden)", locationId = "ThievesGuildEntrance", hidden = true },
 	},
+	-- Inn rooms (L-29): one kind of room per inn, rented by as many players as want one (each gets their own copy).
+	-- room = { width, depth } in studs; the slums' room is the smallest. Prices are placeholders (O-11).
 	inns = {
-		SquareInn = { id = "SquareInn", locationId = "SquareInn" },
+		CrookedLantern = { id = "CrookedLantern", locationId = "CrookedLantern", displayName = "The Crooked Lantern", room = { 10, 12 }, pricePerDay = 10, style = "Slum" },
+		SailorsTavern = { id = "SailorsTavern", locationId = "SailorsTavern", displayName = "The Salt and Anchor", room = { 12, 14 }, pricePerDay = 25, style = "Harbor" },
+		SquareInn = { id = "SquareInn", locationId = "SquareInn", displayName = "The Square Inn", room = { 14, 16 }, pricePerDay = 50, style = "Market" },
 	},
 	regions = {
 		SouthernForest = { id = "SouthernForest", displayName = "Southern Forest", place = "Main", available = true },

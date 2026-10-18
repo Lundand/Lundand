@@ -5,6 +5,7 @@
 local Kit = require(script.Parent.Kit)
 local Furniture = require(script.Parent.Furniture)
 local Landmarks = require(script.Parent.Landmarks)
+local LayoutRules = require(script.Parent.Parent.Parent.Domain.LayoutRules)
 
 local Outdoors = {}
 local C = Kit.colors
@@ -94,52 +95,27 @@ function Outdoors.ground(layout: any, root: Instance, holes: {{number}})
 		surface:SetAttribute("Water", true)
 	end
 	-- the quay wall along the water
-	Kit.part(folder, "QuayWall", Vector3.new(2, water.depth, wz1 - wz0), CFrame.new(wx0 - 1, -water.depth / 2, (wz0 + wz1) / 2), rgb(130, 128, 120), M.Slate)
-	Kit.part(folder, "QuayWall", Vector3.new(b.maxX - wx0 + 6, water.depth, 2), CFrame.new((wx0 + b.maxX + 6) / 2, -water.depth / 2, wz0 - 1), rgb(130, 128, 120), M.Slate)
-	Kit.part(folder, "QuayWall", Vector3.new(b.maxX - wx0 + 6, water.depth, 2), CFrame.new((wx0 + b.maxX + 6) / 2, -water.depth / 2, wz1 + 1), rgb(130, 128, 120), M.Slate)
-	Kit.part(folder, "QuayEdge", Vector3.new(1.4, 0.4, wz1 - wz0), CFrame.new(wx0 + 0.7, 0.2, (wz0 + wz1) / 2), rgb(180, 176, 166), M.Limestone)
+	-- the quay walls stand a fifth of a stud proud of the land into the water, and stop just under the paving,
+	-- so their faces never share a plane with the paving or the meadow
+	local quayH = water.depth - 0.1
+	Kit.part(folder, "QuayWall", Vector3.new(2.2, quayH, wz1 - wz0 - 0.4), CFrame.new(wx0 - 0.9, -0.1 - quayH / 2, (wz0 + wz1) / 2), rgb(130, 128, 120), M.Slate)
+	Kit.part(folder, "QuayWall", Vector3.new(b.maxX - wx0 + 6.4, quayH, 2.2), CFrame.new((wx0 + b.maxX + 6.4) / 2, -0.1 - quayH / 2, wz0 - 0.9), rgb(130, 128, 120), M.Slate)
+	Kit.part(folder, "QuayWall", Vector3.new(b.maxX - wx0 + 6.4, quayH, 2.2), CFrame.new((wx0 + b.maxX + 6.4) / 2, -0.1 - quayH / 2, wz1 + 0.9), rgb(130, 128, 120), M.Slate)
+	-- the kerb along the quay, on the land side of the edge (the piers start at the edge)
+	Kit.part(folder, "QuayEdge", Vector3.new(1.4, 0.4, wz1 - wz0 - 0.4), CFrame.new(wx0 - 0.7, 0.2, (wz0 + wz1) / 2), rgb(180, 176, 166), M.Limestone)
 end
 
-local ROAD_LOOK: {[string]: any} = {
-	Main = { color = rgb(132, 124, 112), material = M.Cobblestone, top = 0.08 },
-	Secondary = { color = rgb(142, 134, 122), material = M.Cobblestone, top = 0.07 },
-	Noble = { color = rgb(196, 190, 176), material = M.Pavement, top = 0.09 },
-	Quay = { color = rgb(150, 148, 140), material = M.Slate, top = 0.1 },
-}
-local SURFACE_LOOK: {[string]: any} = {
-	Plaza = { color = rgb(206, 196, 176), material = M.Pavement, top = 0.12 },
-	Courtyard = { color = rgb(190, 180, 160), material = M.Pavement, top = 0.1 },
-	Yard = { color = rgb(140, 120, 92), material = M.Ground, top = 0.05 },
-	Alley = { color = rgb(110, 98, 84), material = M.Mud, top = 0.04 },
-	Garden = { color = rgb(96, 140, 70), material = M.Grass, top = 0.11 },
-}
-
+-- The paving is the street; only the square and the gardens are drawn on top of it, each a clear step higher and
+-- never overlapping another surface, so nothing flickers.
 function Outdoors.roads(layout: any, root: Instance)
-	local folder = Kit.folder(root, "Roads")
-	for _, road in ipairs(layout.roads) do
-		local look = ROAD_LOOK[road.surface or road.width] or ROAD_LOOK.Secondary
-		local part = Kit.part(folder, road.id, Vector3.new(road.size[1], 0.2, road.size[2]), corners(road) * CFrame.new(0, look.top - 0.1, 0), look.color, look.material)
-		part.CastShadow = false
-		-- a drainage gutter down the middle of the main roads
-		if road.width == "Main" and road.surface == nil and (road.yaw or 0) == 0 then
-			local alongX = road.size[1] > road.size[2]
-			local size = if alongX then Vector3.new(road.size[1], 0.2, 0.8) else Vector3.new(0.8, 0.2, road.size[2])
-			local gutter = Kit.part(folder, "Gutter", size, corners(road) * CFrame.new(0, look.top + 0.0, 0), rgb(90, 86, 80), M.Slate, NO)
-			gutter.CastShadow = false
-		end
-	end
+	local folder = Kit.folder(root, "Surfaces")
 	for _, zone in ipairs(layout.ground) do
-		local look = SURFACE_LOOK[zone.surface]
-		if look ~= nil then
-			local part
-			if zone.shape == "Disc" then
-				part = Kit.part(folder, zone.id, Vector3.new(0.2, zone.size[1], zone.size[1]), CFrame.new(zone.center[1], look.top - 0.1, zone.center[2]) * CFrame.Angles(0, 0, math.pi / 2), look.color, look.material, { shape = Enum.PartType.Cylinder })
-				-- a ring of darker paving around the fountain
-				Kit.part(folder, "PlazaRing", Vector3.new(0.2, 40, 40), CFrame.new(zone.center[1], look.top - 0.08, zone.center[2]) * CFrame.Angles(0, 0, math.pi / 2), rgb(170, 160, 140), M.Pavement, { shape = Enum.PartType.Cylinder })
-			else
-				part = Kit.part(folder, zone.id, Vector3.new(zone.size[1], 0.2, zone.size[2]), corners(zone) * CFrame.new(0, look.top - 0.1, 0), look.color, look.material)
-			end
-			part.CastShadow = false
+		if zone.surface == "Plaza" and zone.shape == "Disc" then
+			local disc = Kit.part(folder, zone.id, Vector3.new(0.3, zone.size[1], zone.size[1]), CFrame.new(zone.center[1], 0.15, zone.center[2]) * CFrame.Angles(0, 0, math.pi / 2), rgb(206, 196, 176), M.Pavement, { shape = Enum.PartType.Cylinder })
+			disc.CastShadow = false
+		elseif zone.surface == "Garden" then
+			local bed = Kit.part(folder, zone.id, Vector3.new(zone.size[1], 0.4, zone.size[2]), corners(zone) * CFrame.new(0, 0.2, 0), rgb(96, 140, 70), M.Grass)
+			bed.CastShadow = false
 		end
 	end
 end
@@ -153,13 +129,26 @@ function Outdoors.walls(layout: any, root: Instance)
 	local stone = rgb(150, 146, 136)
 	local water = layout.water[1]
 	local wz0, wz1 = water.center[2] - water.size[2] / 2, water.center[2] + water.size[2] / 2
+	-- no merlons inside the wall's towers or the castle's
+	local function inTower(point: Vector3): boolean
+		for _, tower in ipairs(layout.wallTowers) do
+			if LayoutRules.contains(tower, { point.X, point.Z }) then
+				return true
+			end
+		end
+		for _, entry in ipairs(layout.blocks) do
+			if entry.kind == "Tower" and LayoutRules.contains(entry, { point.X, point.Z }) then
+				return true
+			end
+		end
+		return false
+	end
 	local sides = {
 		{ name = "North", alongX = true, fixed = b.minZ, from = b.minX, to = b.maxX, outward = -1 },
 		{ name = "South", alongX = true, fixed = b.maxZ, from = b.minX, to = b.maxX, outward = 1 },
 		{ name = "West", alongX = false, fixed = b.minX, from = b.minZ, to = b.maxZ, outward = -1 },
 		{ name = "East", alongX = false, fixed = b.maxX, from = b.minZ, to = b.maxZ, outward = 1 },
 	}
-	local towers = {}
 	for _, side in ipairs(sides) do
 		local openings = {}
 		for _, gate in ipairs(layout.gates) do
@@ -168,19 +157,21 @@ function Outdoors.walls(layout: any, root: Instance)
 				along, across = gate.center[2], gate.center[1]
 			end
 			if across == side.fixed then
-				table.insert(openings, { along - gate.width / 2, along + gate.width / 2, gate })
+				-- the wall stops half a stud inside the gate's piers, so its end never shows in the passage
+				table.insert(openings, { along - gate.width / 2 - 0.5, along + gate.width / 2 + 0.5, gate })
 			end
 		end
 		table.sort(openings, function(a, c)
 			return a[1] < c[1]
 		end)
 		local segments = {}
-		local start = side.from - T / 2
+		-- north and south walls run past the corners; east and west walls stop against them
+		local start = if side.alongX then side.from - T / 2 else side.from + T / 2
 		for _, opening in ipairs(openings) do
 			table.insert(segments, { start, opening[1] })
 			start = opening[2]
 		end
-		table.insert(segments, { start, side.to + T / 2 })
+		table.insert(segments, { start, if side.alongX then side.to + T / 2 else side.to - T / 2 })
 		for index, seg in ipairs(segments) do
 			local length = seg[2] - seg[1]
 			if length > 0.5 then
@@ -191,37 +182,19 @@ function Outdoors.walls(layout: any, root: Instance)
 				local cf = if side.alongX then CFrame.new(mid, 0, side.fixed) else CFrame.new(side.fixed, 0, mid) * CFrame.Angles(0, math.pi / 2, 0)
 				local f = Kit.frame(folder, cf)
 				f:box(string.format("%sWall%d", side.name, index), Vector3.new(length, H - bottom, T), 0, (H + bottom) / 2, 0, stone, M.Limestone)
-				Landmarks.merlons(f, true, side.outward * (T / 2 - 0.7) * (if side.alongX then 1 else -1), -length / 2, length / 2, H, stone, M.Limestone)
+				Landmarks.merlons(f, true, side.outward * (T / 2 - 0.7) * (if side.alongX then 1 else -1), -length / 2, length / 2, H, stone, M.Limestone, inTower)
 				f:box("WallWalk", Vector3.new(length, 0.3, T - 1.6), 0, H + 0.15, 0, rgb(130, 126, 118), M.Slate, NO)
 			end
 		end
-		-- towers along the side, skipping gate openings
-		local spacing = layout.walls.towerSpacing
-		local count = math.floor((side.to - side.from) / spacing)
-		for index = 0, count do
-			local along = side.from + (side.to - side.from) * index / count
-			local blocked = false
-			for _, opening in ipairs(openings) do
-				if along > opening[1] - 14 and along < opening[2] + 14 then
-					blocked = true
-				end
-			end
-			if not blocked then
-				local x, z = along, side.fixed
-				if not side.alongX then
-					x, z = side.fixed, along
-				end
-				local key = string.format("%d,%d", math.floor(x), math.floor(z))
-				if towers[key] == nil then
-					towers[key] = true
-					local inWater = not side.alongX and side.name == "East" and z > wz0 and z < wz1
-					local f = Kit.frame(folder, CFrame.new(x, 0, z))
-					local bottom = if inWater then -water.depth else -2
-					f:box("WallTower", Vector3.new(16, 42 - bottom, 16), 0, (42 + bottom) / 2, 0, stone, M.Limestone)
-					Landmarks.spire(f, 0, 42, 0, 17.4, 12, rgb(84, 90, 100), M.Slate)
-				end
-			end
-		end
+	end
+	-- towers along the walls (placed by the layout, so houses keep clear of them)
+	for _, tower in ipairs(layout.wallTowers) do
+		local x, z = tower.center[1], tower.center[2]
+		local inWater = x == b.maxX and z > wz0 and z < wz1
+		local f = Kit.frame(folder, CFrame.new(x, 0, z))
+		local bottom = if inWater then -water.depth else -2
+		f:box("WallTower", Vector3.new(tower.size[1], 42 - bottom, tower.size[2]), 0, (42 + bottom) / 2, 0, stone, M.Limestone)
+		Landmarks.spire(f, 0, 42, 0, tower.size[1] + 1.4, 12, rgb(84, 90, 100), M.Slate)
 	end
 	-- gatehouses for the land gates, chain towers for the sea gate
 	for _, gate in ipairs(layout.gates) do
@@ -271,7 +244,7 @@ local function ship(folder: Instance, spec: any, flag: boolean)
 		f:wedgeAt("Bow", Vector3.new(B / 2, 7, L * 0.22), CFrame.new(L * 0.39, deckY - 3.5, s * B / 4) * CFrame.Angles(0, -math.pi / 2, 0) * (if s == 1 then CFrame.new() else CFrame.new()), hull, M.WoodPlanks)
 	end
 	f:box("Deck", Vector3.new(L * 0.78, 0.4, B - 1), -L * 0.11, deckY + 0.2, 0, rgb(150, 116, 80), M.WoodPlanks)
-	f:box("Sterncastle", Vector3.new(L * 0.16, 5, B), -L * 0.42, deckY + 2.5, 0, hull, M.WoodPlanks)
+	f:box("Sterncastle", Vector3.new(L * 0.17, 5, B), -L * 0.425 - 0.01 * L, deckY + 2.5, 0, hull, M.WoodPlanks)
 	for _, s in ipairs({ -1, 1 }) do
 		f:box("Bulwark", Vector3.new(L * 0.62, 1.6, 0.5), 0, deckY + 1.2, s * (B / 2 - 0.25), hull, M.WoodPlanks)
 	end
@@ -430,9 +403,9 @@ function Outdoors.dressing(layout: any, root: Instance)
 		if (road.width == "Main" or road.width == "Noble") and (road.yaw or 0) == 0 and road.surface == nil then
 			local alongX = road.size[1] > road.size[2]
 			local length = if alongX then road.size[1] else road.size[2]
-			local count = math.floor(length / 40)
+			local count = math.floor(length / 64)
 			for index = 0, count - 1 do
-				local t = -length / 2 + 20 + index * 40
+				local t = -length / 2 + 32 + index * 64
 				local side = if index % 2 == 0 then 1 else -1
 				local half = (if alongX then road.size[2] else road.size[1]) / 2 - 0.8
 				if alongX then
@@ -541,7 +514,10 @@ function Outdoors.estates(layout: any, root: Instance)
 					local at = if alongX then houseX else houseZ
 					table.insert(openings, { from = at - 4, to = at + 4, bottom = 0, top = 4 })
 				end
-				Kit.wall(f, "GardenWall", alongX, fixed, -run / 2, run / 2, 0, 3, 1.2, openings, stone, M.Limestone)
+				-- north and south walls run over the corners to the side walls' outer faces; the side walls stop
+				-- against their inner faces
+				local inset = if alongX then -0.6 else 0.6
+				Kit.wall(f, "GardenWall", alongX, fixed, -run / 2 + inset, run / 2 - inset, 0, 3, 1.2, openings, stone, M.Limestone)
 				if side == door then
 					local at = if alongX then houseX else houseZ
 					for _, s in ipairs({ -1, 1 }) do
@@ -551,7 +527,7 @@ function Outdoors.estates(layout: any, root: Instance)
 					end
 					-- the iron gate stands open
 					local gx, gz = if alongX then at - 3.6 else fixed, if alongX then fixed else at - 3.6
-					f:box("IronGate", if alongX then Vector3.new(0.2, 4, 3.6) else Vector3.new(3.6, 4, 0.2), gx, 2, gz + (if alongX then (if side == "South" then -1.8 else 1.8) else 0), C.iron, M.Metal, NO)
+					f:box("IronGate", if alongX then Vector3.new(0.2, 4, 3.5) else Vector3.new(3.5, 4, 0.2), gx, 2, gz + (if alongX then (if side == "South" then -1.85 else 1.85) else 0), C.iron, M.Metal, NO)
 				end
 			end
 			-- hedges along the inside of the side walls, trees in the corners, a flower bed by the path

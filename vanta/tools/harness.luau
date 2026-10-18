@@ -17,6 +17,20 @@ roblox.implementMethod("Instance", "WaitForChild", function(self, name)
 	return child
 end)
 
+-- Model pivots (Lune has the WorldPivot property but not these methods)
+roblox.implementMethod("Model", "GetPivot", function(self)
+	return self.WorldPivot
+end)
+roblox.implementMethod("Model", "PivotTo", function(self, target)
+	local delta = target * self.WorldPivot:Inverse()
+	for _, part in self:GetDescendants() do
+		if part:IsA("BasePart") then
+			part.CFrame = delta * part.CFrame
+		end
+	end
+	self.WorldPivot = target
+end)
+
 local game = roblox.Instance.new("DataModel")
 Harness.game = game
 

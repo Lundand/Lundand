@@ -4,6 +4,8 @@
 -- Each works in its block's frame, front (door side) towards +z, like House.
 local Kit = require(script.Parent.Kit)
 local Furniture = require(script.Parent.Furniture)
+local Layout = require(game:GetService("ServerStorage"):WaitForChild("ServerData").CityLayout)
+local LayoutRules = require(script.Parent.Parent.Parent.Domain.LayoutRules)
 
 local Landmarks = {}
 local C = Kit.colors
@@ -41,14 +43,14 @@ local function spire(f: Frame, x: number, y: number, z: number, size: number, he
 end
 
 -- Battlements along a run: merlons every 4 studs
-local function merlons(f: Frame, alongX: boolean, fixed: number, from: number, to: number, y: number, color: Color3, material: Enum.Material)
+-- (hidden, when given, says which merlons stand inside a tower: those are left out)
+local function merlons(f: Frame, alongX: boolean, fixed: number, from: number, to: number, y: number, color: Color3, material: Enum.Material, hidden: ((Vector3) -> boolean)?)
 	local count = math.floor((to - from) / 4)
 	for index = 0, count - 1 do
-		local a = from + 2 + index * 4
-		if alongX then
-			f:box("Merlon", Vector3.new(2, 2.4, 1.4), a, y + 1.2, fixed, color, material)
-		else
-			f:box("Merlon", Vector3.new(1.4, 2.4, 2), fixed, y + 1.2, a, color, material)
+		local a = from + 2 + index * 4 + 0.05
+		local x, z = if alongX then a else fixed, if alongX then fixed else a
+		if hidden == nil or not hidden(f.cframe:PointToWorldSpace(Vector3.new(x, y + 1.2, z))) then
+			f:box("Merlon", if alongX then Vector3.new(1.86, 2.4, 1.3) else Vector3.new(1.3, 2.4, 1.86), x, y + 1.2, z, color, material)
 		end
 	end
 end
@@ -79,8 +81,10 @@ function Landmarks.fountain(entry: any, parent: Instance): Model
 		local a = index * math.pi / 4
 		local cf = CFrame.Angles(0, a, 0) * CFrame.new(0, 1.3, r - 0.9)
 		local side = 2 * r * math.tan(math.pi / 8) + 0.2
-		f:boxAt("Basin", Vector3.new(side, 2.6, 1.8), cf, stone, M.Marble)
-		f:boxAt("BasinLip", Vector3.new(side + 0.4, 0.4, 2.4), cf * CFrame.new(0, 1.5, 0), rgb(226, 222, 210), M.Marble)
+		-- neighbouring segments differ a little in height, so the corners where they overlap never flicker
+		local lift = (index % 2) * 0.12
+		f:boxAt("Basin", Vector3.new(side, 2.6 + lift, 1.8), cf * CFrame.new(0, lift / 2, 0), stone, M.Marble)
+		f:boxAt("BasinLip", Vector3.new(side + 0.4, 0.4, 2.4), cf * CFrame.new(0, 1.5 + lift, 0), rgb(226, 222, 210), M.Marble)
 	end
 	f:cyl("BasinFloor", 0.6, entry.size[1] - 2, 0, 0, 0, rgb(150, 160, 160), M.Slate)
 	local water = f:cyl("Water", 0.2, entry.size[1] - 3, 0, 2, 0, rgb(80, 140, 170), M.Glass, { collide = false, query = false, transparency = 0.35, shadow = false })
@@ -120,7 +124,8 @@ function Landmarks.church(entry: any, parent: Instance): Model
 	local hw, hd = W / 2, D / 2
 	local glassColors = { rgb(180, 40, 50), rgb(40, 80, 170), rgb(200, 160, 40), rgb(60, 140, 80), rgb(120, 60, 150) }
 
-	f:box("Plinth", Vector3.new(W, 0.6, D), 0, 0.3, 0, darkStone, M.Limestone)
+	-- the plinth sits just inside the walls' outer faces, so no face is shared
+	f:box("Plinth", Vector3.new(W - 0.4, 0.6, D - 0.4), 0, 0.3, 0, darkStone, M.Limestone)
 	f:box("Floor", Vector3.new(W - 2 * T, 0.1, D - 2 * T), 0, 0.65, 0, rgb(176, 170, 160), M.Slate, NO)
 	-- outer walls of the aisles, with tall stained windows
 	for _, s in ipairs({ -1, 1 }) do
@@ -130,8 +135,8 @@ function Landmarks.church(entry: any, parent: Instance): Model
 			table.insert(openings, { from = z - 1.6, to = z + 1.6, bottom = 4, top = 13.5 })
 		end
 		if s == 1 then
-			-- the sacristy's side door
-			table.insert(openings, { from = -hd + 4, to = -hd + 9, bottom = 0, top = 9 })
+			-- the sacristy's side door (clear of the first window)
+			table.insert(openings, { from = -hd + 3, to = -hd + 7.5, bottom = 0, top = 9 })
 		end
 		Kit.wall(f, "AisleWall", false, s * (hw - T / 2), -hd + T, hd - T, 0, aisleTop, T, openings, stone, M.Limestone)
 		for index = 0, 5 do
@@ -159,7 +164,8 @@ function Landmarks.church(entry: any, parent: Instance): Model
 			f:cyl("Pillar", aisleTop, 2.2, s * (nave + 0.5), 0.6, z, rgb(210, 206, 198), M.Limestone)
 		end
 		-- aisle roof (lean-to) and its ceiling
-		f:wedgeAt("AisleRoof", Vector3.new(D + 1, 4, hw - nave + 1), CFrame.new(s * (nave + (hw - nave) / 2 + 0.5), aisleTop + 2, 0) * CFrame.Angles(0, if s == 1 then -math.pi / 2 else math.pi / 2, 0), roof, M.Slate)
+		-- the aisle roof leans against the clerestory's outer face (nave + 1) and overhangs the aisle wall
+		f:wedgeAt("AisleRoof", Vector3.new(D + 1, 4, hw - nave - 0.5), CFrame.new(s * ((nave + 1 + hw + 0.5) / 2), aisleTop + 2, 0) * CFrame.Angles(0, if s == 1 then -math.pi / 2 else math.pi / 2, 0), roof, M.Slate)
 	end
 	-- nave front and back gables (rose window at the front)
 	for _, z in ipairs({ hd - T / 2, -hd + T / 2 }) do
@@ -170,19 +176,21 @@ function Landmarks.church(entry: any, parent: Instance): Model
 	local rise = 10
 	f:wedgeAt("NaveRoof", Vector3.new(D + 2, rise, nave + 1.5), CFrame.new(-(nave + 1.5) / 2, naveTop + rise / 2, 0) * CFrame.Angles(0, math.pi / 2, 0), roof, M.Slate)
 	f:wedgeAt("NaveRoof", Vector3.new(D + 2, rise, nave + 1.5), CFrame.new((nave + 1.5) / 2, naveTop + rise / 2, 0) * CFrame.Angles(0, -math.pi / 2, 0), roof, M.Slate)
-	f:box("NaveCeiling", Vector3.new(nave * 2 + 1, 0.6, D - 2 * T), 0, naveTop - 0.3, 0, rgb(120, 96, 70), M.WoodPlanks, NO)
-	f:box("AisleCeiling", Vector3.new(hw - nave - 2, 0.6, D - 2 * T), -(nave + hw) / 2 - 0.5, aisleTop - 0.3, 0, rgb(120, 96, 70), M.WoodPlanks, NO)
-	f:box("AisleCeiling", Vector3.new(hw - nave - 2, 0.6, D - 2 * T), (nave + hw) / 2 + 0.5, aisleTop - 0.3, 0, rgb(120, 96, 70), M.WoodPlanks, NO)
+	-- ceilings sit just under the wall tops
+	f:box("NaveCeiling", Vector3.new(nave * 2 + 1, 0.6, D - 2 * T), 0, naveTop - 0.4, 0, rgb(120, 96, 70), M.WoodPlanks, NO)
+	f:box("AisleCeiling", Vector3.new(hw - nave - 2, 0.6, D - 2 * T), -(nave + hw) / 2 - 0.5, aisleTop - 0.4, 0, rgb(120, 96, 70), M.WoodPlanks, NO)
+	f:box("AisleCeiling", Vector3.new(hw - nave - 2, 0.6, D - 2 * T), (nave + hw) / 2 + 0.5, aisleTop - 0.4, 0, rgb(120, 96, 70), M.WoodPlanks, NO)
 	-- bell tower at the front-left corner, rising well above the roofs
 	local tx, tz, ts = -hw + 6, hd - 6, 12
-	f:box("Tower", Vector3.new(ts, 52, ts), tx, 26, tz, stone, M.Limestone)
+	-- a little wider than its corner of the church, so its faces stand clear of the church walls
+	f:box("Tower", Vector3.new(ts + 0.4, 52, ts + 0.4), tx - 0.2, 26, tz + 0.2, stone, M.Limestone)
 	for _, s in ipairs({ -1, 1 }) do
-		f:box("BelfryOpening", Vector3.new(0.3, 6, 4), tx + s * (ts / 2 + 0.05), 44, tz, rgb(30, 30, 34), M.SmoothPlastic, NO)
+		f:box("BelfryOpening", Vector3.new(0.3, 6, 4), tx - 0.2 + s * (ts / 2 + 0.3), 44, tz + 0.2, rgb(30, 30, 34), M.SmoothPlastic, NO)
 	end
-	f:box("BelfryOpening", Vector3.new(4, 6, 0.3), tx, 44, tz + ts / 2 + 0.05, rgb(30, 30, 34), M.SmoothPlastic, NO)
-	spire(f, tx, 52, tz, ts + 1, 18, roof, M.Slate)
-	f:box("SpireCross", Vector3.new(0.6, 4, 0.6), tx, 72, tz, C.lundandGold, M.Metal, NO)
-	f:box("SpireCross", Vector3.new(2.4, 0.6, 0.6), tx, 72.6, tz, C.lundandGold, M.Metal, NO)
+	f:box("BelfryOpening", Vector3.new(4, 6, 0.3), tx - 0.2, 44, tz + 0.2 + ts / 2 + 0.3, rgb(30, 30, 34), M.SmoothPlastic, NO)
+	spire(f, tx - 0.2, 52, tz + 0.2, ts + 1, 18, roof, M.Slate)
+	f:box("SpireCross", Vector3.new(0.6, 4, 0.6), tx - 0.2, 72, tz + 0.2, C.lundandGold, M.Metal, NO)
+	f:box("SpireCross", Vector3.new(2.4, 0.5, 0.5), tx - 0.2, 72.6, tz + 0.2, C.lundandGold, M.Metal, NO)
 	-- great doors standing open
 	for _, s in ipairs({ -1, 1 }) do
 		f:box("GreatDoor", Vector3.new(0.4, 13.6, 4.8), s * 5.2, 7.4, hd - T - 2.4, rgb(80, 54, 34), M.WoodPlanks, NO)
@@ -199,7 +207,7 @@ function Landmarks.church(entry: any, parent: Instance): Model
 	for row = 0, 5 do
 		local z = 14 + row * 3
 		for _, s in ipairs({ -1, 1 }) do
-			put(f, s * 6.5, 0.6, z, 180, function(g)
+			put(f, s * 6.5, 0.6, z, 0, function(g)
 				Furniture.pew(g, 8)
 			end)
 		end
@@ -218,18 +226,6 @@ function Landmarks.church(entry: any, parent: Instance): Model
 	for _, s in ipairs({ -1, 1 }) do
 		Kit.wall(f, "ChapelWall", true, -hd + 13, s * (nave + 1.6), s * (hw - T), 0, aisleTop - 0.6, 0.8, { { from = s * (nave + 1.6) + (if s == 1 then 1 else -5), to = s * (nave + 1.6) + (if s == 1 then 5 else -1), bottom = 0, top = 8.4 } }, stone, M.Limestone)
 	end
-	put(f, hw - 6, 0.6, -hd + 7, -90, function(g)
-		Furniture.wardrobe(g)
-	end)
-	put(f, hw - 9, 0.6, -hd + 4, 0, function(g)
-		Furniture.chest(g, rgb(110, 70, 40))
-	end)
-	put(f, -hw + 6, 0.6, -hd + 6, 90, function(g)
-		Furniture.pew(g, 5)
-	end)
-	put(f, -hw + 4, 0.6, -hd + 9, 90, function(g)
-		Furniture.lamp(g, 6)
-	end)
 	for index = 0, 3 do
 		local z = -hd + 12 + index * 16
 		local lamp = f:box("HangingLamp", Vector3.new(1.4, 1.4, 1.4), 0, naveTop - 8, z, rgb(255, 214, 150), M.Neon, NO)
@@ -246,7 +242,7 @@ end
 -- The keep of House Lundand: entrance hall, double-height throne hall, guard room and administrative chamber,
 -- grand stairs to the upper floor (council chamber, royal apartments) wrapping round the hall.
 --------------------------------------------------------------------------------------------------------------------
-local function stoneHall(f: Frame, W: number, D: number, height: number, stone: Color3, frontOpenings: {Kit.Opening}, windowsY: {number})
+local function stoneHall(f: Frame, W: number, D: number, height: number, stone: Color3, frontOpenings: {Kit.Opening}, windowsY: {number}, battlements: boolean)
 	local T = 2
 	local hw, hd = W / 2, D / 2
 	local function windows(run: number): {Kit.Opening}
@@ -265,7 +261,7 @@ local function stoneHall(f: Frame, W: number, D: number, height: number, stone: 
 	for _, w in ipairs(front) do
 		local blocked = false
 		for _, o in ipairs(frontOpenings) do
-			if w.to > o.from - 1 and w.from < o.to + 1 and w.bottom < o.top then
+			if w.to > o.from - 1 and w.from < o.to + 1 then
 				blocked = true
 			end
 		end
@@ -276,21 +272,24 @@ local function stoneHall(f: Frame, W: number, D: number, height: number, stone: 
 	for _, o in ipairs(frontOpenings) do
 		table.insert(kept, o)
 	end
-	Kit.wall(f, "FrontWall", true, hd - T / 2, -hw, hw, 0, height, T, kept, stone, M.Limestone)
-	Kit.wall(f, "BackWall", true, -hd + T / 2, -hw, hw, 0, height, T, windows(W), stone, M.Limestone)
+	-- windows stack in columns (one above the other), so the walls are cut as facades
+	Kit.facade(f, "FrontWall", true, hd - T / 2, -hw, hw, 0, height, T, kept, stone, M.Limestone)
+	Kit.facade(f, "BackWall", true, -hd + T / 2, -hw, hw, 0, height, T, windows(W), stone, M.Limestone)
 	for _, s in ipairs({ -1, 1 }) do
-		Kit.wall(f, "SideWall", false, s * (hw - T / 2), -hd + T, hd - T, 0, height, T, windows(D - 2 * T), stone, M.Limestone)
+		Kit.facade(f, "SideWall", false, s * (hw - T / 2), -hd + T, hd - T, 0, height, T, windows(D - 2 * T), stone, M.Limestone)
 	end
 	for _, y in ipairs(windowsY) do
 		-- glass in every window at this height (one pane per wall run keeps the part count low)
 		f:box("WindowGlass", Vector3.new(W - 0.2, 6, 0.2), 0, y + 3, hd - T / 2, C.glass, M.Glass, { collide = false, query = false, transparency = 0.6, shadow = false })
 		f:box("WindowGlass", Vector3.new(W - 0.2, 6, 0.2), 0, y + 3, -hd + T / 2, C.glass, M.Glass, { collide = false, query = false, transparency = 0.6, shadow = false })
 	end
-	merlons(f, true, hd - 0.7, -hw, hw, height, stone, M.Limestone)
-	merlons(f, true, -hd + 0.7, -hw, hw, height, stone, M.Limestone)
-	merlons(f, false, -hw + 0.7, -hd, hd, height, stone, M.Limestone)
-	merlons(f, false, hw - 0.7, -hd, hd, height, stone, M.Limestone)
-	f:box("Plinth", Vector3.new(W, 0.6, D), 0, 0.3, 0, rgb(150, 146, 138), M.Limestone)
+	if battlements then
+		merlons(f, true, hd - 0.7, -hw, hw, height, stone, M.Limestone)
+		merlons(f, true, -hd + 0.7, -hw, hw, height, stone, M.Limestone)
+		merlons(f, false, -hw + 0.7, -hd + 1.4, hd - 1.4, height, stone, M.Limestone)
+		merlons(f, false, hw - 0.7, -hd + 1.4, hd - 1.4, height, stone, M.Limestone)
+	end
+	f:box("Plinth", Vector3.new(W - 0.4, 0.6, D - 0.4), 0, 0.3, 0, rgb(150, 146, 138), M.Limestone)
 end
 
 function Landmarks.keep(entry: any, parent: Instance): Model
@@ -303,12 +302,12 @@ function Landmarks.keep(entry: any, parent: Instance): Model
 	local T = 2
 	local UP = 24 -- the upper floor (the throne hall is double height)
 	local wallTop = 44
-	stoneHall(f, W, D, wallTop, stone, { { from = -4, to = 4, bottom = 0, top = 12 } }, { 4, UP + 4 })
+	stoneHall(f, W, D, wallTop, stone, { { from = -4, to = 4, bottom = 0, top = 12 } }, { 4, UP + 4 }, true)
 	f:box("Floor", Vector3.new(W - 2 * T, 0.1, D - 2 * T), 0, 0.65, 0, rgb(150, 146, 138), M.Slate, NO)
 	-- inner walls: the throne hall between x = -18 and 18, behind the entrance hall (z < 12)
 	local hallX, hallFront = 18, 12
 	for _, s in ipairs({ -1, 1 }) do
-		Kit.wall(f, "HallWall", false, s * hallX, -hd + T, hallFront, 0.6, UP - 1, 1.2, { { from = hallFront - 10, to = hallFront - 5, bottom = 0.6, top = 9 }, { from = -10, to = -5, bottom = 0.6, top = 9 } }, stone, M.Limestone)
+		Kit.wall(f, "HallWall", false, s * hallX, -hd + T, hallFront - 0.6, 0.6, UP - 1, 1.2, { { from = hallFront - 10, to = hallFront - 5, bottom = 0.6, top = 9 }, { from = -10, to = -5, bottom = 0.6, top = 9 } }, stone, M.Limestone)
 	end
 	Kit.wall(f, "HallFront", true, hallFront, -hallX, hallX, 0.6, UP - 1, 1.2, { { from = -5, to = 5, bottom = 0.6, top = 14 } }, stone, M.Limestone)
 	-- the grand stairs run the length of the left wing against its outer wall
@@ -331,15 +330,16 @@ function Landmarks.keep(entry: any, parent: Instance): Model
 	f:box("StairRail", Vector3.new(0.3, 3.2, cut - zHigh), stairX1, UP + 1.6, (cut + zHigh) / 2, C.darkWood, M.Wood)
 	-- gallery rail over the throne hall
 	for _, s in ipairs({ -1, 1 }) do
-		f:box("GalleryRail", Vector3.new(0.4, 3.4, hallFront + hd - T), s * hallX, UP + 1.7, (hallFront - hd + T) / 2, C.darkWood, M.Wood)
+		f:box("GalleryRail", Vector3.new(0.4, 3.4, hallFront + hd - T - 0.4), s * hallX, UP + 1.7, (hallFront - 0.4 - hd + T) / 2, C.darkWood, M.Wood)
 	end
 	f:box("GalleryRail", Vector3.new(hallX * 2, 3.4, 0.4), 0, UP + 1.7, hallFront, C.darkWood, M.Wood)
 	-- the upper floor's rooms: council chamber (left), royal apartments (right), divided along z = -4
 	for _, s in ipairs({ -1, 1 }) do
-		Kit.wall(f, "UpperRoomWall", true, -4, math.min(s * (hallX + 0.4), s * (hw - T)), math.max(s * (hallX + 0.4), s * (hw - T)), UP, wallTop - 10, 1, { { from = s * (hallX + 0.4) + (if s == 1 then 3 else -7), to = s * (hallX + 0.4) + (if s == 1 then 7 else -3), bottom = UP, top = UP + 8.4 } }, stone, M.Limestone)
+		Kit.wall(f, "UpperRoomWall", true, -4, math.min(s * (hallX + 0.4), s * (hw - T)), math.max(s * (hallX + 0.4), s * (hw - T)), UP, wallTop - 10.6, 1, { { from = s * (hallX + 0.4) + (if s == 1 then 3 else -7), to = s * (hallX + 0.4) + (if s == 1 then 7 else -3), bottom = UP, top = UP + 8.4 } }, stone, M.Limestone)
 	end
 	-- roof over the walls (flat leads behind the battlements) and the hall ceiling
-	f:box("Roof", Vector3.new(W - 2, 1, D - 2), 0, wallTop - 0.5, 0, rgb(90, 96, 110), M.Slate)
+	-- the flat roof sits a little below the wall tops, inside them
+	f:box("Roof", Vector3.new(W - 2, 1, D - 2), 0, wallTop - 0.6, 0, rgb(90, 96, 110), M.Slate)
 	f:box("Ceiling", Vector3.new(W - 2 * T, 0.6, D - 2 * T), 0, wallTop - 10.3, 0, rgb(100, 76, 54), M.WoodPlanks, NO)
 	-- corner turrets with pointed roofs
 	for _, sx in ipairs({ -1, 1 }) do
@@ -365,41 +365,6 @@ function Landmarks.keep(entry: any, parent: Instance): Model
 		Kit.light(chandelier, rgb(255, 210, 150), 30, 1)
 	end
 	lundandBanner(f, 0, 14, -hd + T + 0.2, 0, 1.4)
-	-- guard room, administrative chamber, stores, upstairs rooms
-	put(f, -(hallX + hw) / 2 + 2, 0.6, hd - T - 1, 180, function(g)
-		Furniture.weaponRack(g)
-	end)
-	put(f, -(hallX + hw) / 2, 0.6, 2, 0, function(g)
-		Furniture.table(g, 5, 3.4)
-	end)
-	put(f, (hallX + hw) / 2, 0.6, 4, 180, function(g)
-		Furniture.desk(g)
-	end)
-	put(f, hw - 4, 0.6, 2, -90, function(g)
-		Furniture.bookshelf(g, 6)
-	end)
-	put(f, (hallX + hw) / 2, 0.6, -14, 0, function(g)
-		Furniture.crates(g, 4)
-	end)
-	put(f, -(hallX + hw) / 2, 0.6, -14, 0, function(g)
-		Furniture.sacks(g)
-	end)
-	put(f, -(hallX + hw) / 2 + 2, UP, 8, 0, function(g)
-		Furniture.longTable(g, 12)
-	end)
-	put(f, (hallX + hw) / 2, UP, -16, 0, function(g)
-		Furniture.fourPoster(g, C.lundandBlue)
-	end)
-	put(f, (hallX + hw) / 2, UP, 8, 180, function(g)
-		Furniture.desk(g)
-	end)
-	put(f, hw - 4, UP, -8, -90, function(g)
-		Furniture.wardrobe(g)
-	end)
-	for _, spot in ipairs({ { -(hallX + hw) / 2, 8 }, { (hallX + hw) / 2, -14 }, { (hallX + hw) / 2, 8 } }) do
-		local lamp = f:box("WallLamp", Vector3.new(0.8, 1, 0.8), spot[1], UP + 9, spot[2], rgb(255, 214, 150), M.Neon, NO)
-		Kit.light(lamp, rgb(255, 210, 150), 22, 0.9)
-	end
 	-- the royal apartments are closed to visitors until the story opens them
 	model:SetAttribute("RestrictedUpperFloor", true)
 	return model
@@ -419,7 +384,7 @@ function Landmarks.library(entry: any, parent: Instance): Model
 	local T = 2
 	local GALLERY = 13
 	local wallTop = 28
-	stoneHall(f, W, D, wallTop, stone, { { from = -3.5, to = 3.5, bottom = 0, top = 11 } }, { 4, GALLERY + 4 })
+	stoneHall(f, W, D, wallTop, stone, { { from = -3.5, to = 3.5, bottom = 0, top = 11 } }, { 4, GALLERY + 4 }, false)
 	f:box("Floor", Vector3.new(W - 2 * T, 0.1, D - 2 * T), 0, 0.65, 0, rgb(120, 92, 64), M.WoodPlanks, NO)
 	-- pitched roof over the hall
 	local rise = 9
@@ -433,7 +398,7 @@ function Landmarks.library(entry: any, parent: Instance): Model
 		-- side galleries, leaving room at the front for the stair arrivals
 		local zFrom, zTo = -hd + T + g0, hd - T - 18
 		f:box("Gallery", Vector3.new(g0, 1, zTo - zFrom), s * (hw - T - g0 / 2), GALLERY - 0.5, (zFrom + zTo) / 2, rgb(110, 84, 58), M.WoodPlanks)
-		f:box("GalleryRail", Vector3.new(0.3, 3.2, zTo - (-hd + T + g0)), s * (hw - T - g0), GALLERY + 1.6, (zTo + (-hd + T + g0)) / 2, C.darkWood, M.Wood)
+		f:box("GalleryRail", Vector3.new(0.3, 3.2, zTo - (-hd + T + g0) - 0.3), s * (hw - T - g0), GALLERY + 1.6, (zTo + (-hd + T + g0) + 0.3) / 2, C.darkWood, M.Wood)
 		-- a stair up each side, rising from the front towards the gallery
 		local x0, x1 = s * (hw - T) - (if s == 1 then 4.5 else 0), s * (hw - T) + (if s == 1 then 0 else 4.5)
 		local lo, hi = math.min(x0, x1), math.max(x0, x1)
@@ -444,9 +409,11 @@ function Landmarks.library(entry: any, parent: Instance): Model
 	-- bookcases: tall ones on the ground floor walls and in rows across the hall, more along the gallery
 	for _, s in ipairs({ -1, 1 }) do
 		for index = 0, 2 do
-			put(f, s * (hw - T - 0.8), 0.6, -hd + T + 8 + index * 6.5, s * -90, function(g)
-				Furniture.bookshelf(g, 5.6)
-			end)
+			if -hd + T + 8 + index * 6.5 < hd - T - 21 then
+				put(f, s * (hw - T - 0.8), 0.6, -hd + T + 8 + index * 6.5, s * -90, function(g)
+					Furniture.bookshelf(g, 5.6)
+				end)
+			end
 			if -hd + T + 8 + index * 6.5 < hd - T - 21 then
 				put(f, s * (hw - T - 0.8), GALLERY, -hd + T + 8 + index * 6.5, s * -90, function(g)
 					Furniture.bookshelf(g, 5.6)
@@ -484,7 +451,7 @@ function Landmarks.library(entry: any, parent: Instance): Model
 	put(f, 0, GALLERY, -hd + T + 3.5, 0, function(g)
 		Furniture.desk(g)
 	end)
-	put(f, 0, 0.6, 0, 0, function(g)
+	put(f, 0, 0.7, 0, 0, function(g)
 		Furniture.rug(g, 10, 14, rgb(90, 30, 40))
 	end)
 	for index = 0, 1 do
@@ -505,12 +472,21 @@ function Landmarks.castleWall(entry: any, parent: Instance): Model
 	local f = Kit.frame(model, CFrame.new(x, 0, z))
 	local stone = rgb(160, 156, 148)
 	f:box("CurtainWall", Vector3.new(w, h, d), 0, h / 2, 0, stone, M.Limestone)
+	-- the castle's towers stand over the wall's ends; no merlons inside them
+	local function inTower(point: Vector3): boolean
+		for _, other in ipairs(Layout.blocks) do
+			if other.kind == "Tower" and LayoutRules.contains(other, { point.X, point.Z }) then
+				return true
+			end
+		end
+		return false
+	end
 	if w > d then
-		merlons(f, true, -d / 2 + 0.7, -w / 2, w / 2, h, stone, M.Limestone)
-		merlons(f, true, d / 2 - 0.7, -w / 2, w / 2, h, stone, M.Limestone)
+		merlons(f, true, -d / 2 + 0.7, -w / 2, w / 2, h, stone, M.Limestone, inTower)
+		merlons(f, true, d / 2 - 0.7, -w / 2, w / 2, h, stone, M.Limestone, inTower)
 	else
-		merlons(f, false, -w / 2 + 0.7, -d / 2, d / 2, h, stone, M.Limestone)
-		merlons(f, false, w / 2 - 0.7, -d / 2, d / 2, h, stone, M.Limestone)
+		merlons(f, false, -w / 2 + 0.7, -d / 2, d / 2, h, stone, M.Limestone, inTower)
+		merlons(f, false, w / 2 - 0.7, -d / 2, d / 2, h, stone, M.Limestone, inTower)
 	end
 	return model
 end

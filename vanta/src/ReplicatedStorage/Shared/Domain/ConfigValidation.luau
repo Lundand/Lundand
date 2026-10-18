@@ -290,6 +290,9 @@ function ConfigValidation.validate(content: any): {string}
 		if inn.id ~= key or world.locations[inn.locationId] == nil then
 			add("inn " .. tostring(key), "needs a matching id and a known location")
 		end
+		if not Check.isPositiveInteger(inn.pricePerDay) or type(inn.room) ~= "table" or not Check.isPositiveInteger(inn.room[1]) or not Check.isPositiveInteger(inn.room[2]) then
+			add("inn " .. tostring(key), "needs a room size and a price per day")
+		end
 	end
 
 	-- Quests (L-30)

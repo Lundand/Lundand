@@ -31,6 +31,8 @@ local ORDER = {
 	"CosmeticShopService",
 	"OutboxService",
 	"PropertyService",
+	"InteriorService",
+	"RentalService",
 	"GuildService",
 	"ShopService",
 	"RiftService",

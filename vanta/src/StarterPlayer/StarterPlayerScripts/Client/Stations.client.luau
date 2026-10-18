@@ -325,6 +325,57 @@ renderProperty = function()
 end
 Ui.onRefresh("Property", renderProperty)
 
+-- Inn rooms (L-29) ---------------------------------------------------------------------------------------------------
+local _, rentalBody = Ui.window(gui, "Rentals", "A room at the inn", 460, 330)
+local rentalView: any = nil
+
+local function duration(seconds: number): string
+	local hours = math.floor(seconds / 3600)
+	if hours >= 24 then
+		return string.format("%d days %d hours", math.floor(hours / 24), hours % 24)
+	end
+	return string.format("%d hours %d minutes", hours, math.floor((seconds % 3600) / 60))
+end
+
+local function renderRentals()
+	Ui.clear(rentalBody)
+	local view = rentalView
+	if view == nil then
+		return
+	end
+	local heading = Ui.text(rentalBody, tostring(view.innName), 22, Ui.colors.text)
+	heading.FontFace = Ui.fonts.title
+	Ui.text(rentalBody, string.format("A private room, %d by %d studs  ·  %d gold a day", view.room[1], view.room[2], view.pricePerDay), 14, Ui.colors.muted)
+	Ui.text(rentalBody, string.format("You have %d gold", view.gold), 13, Ui.colors.muted)
+	if view.activeInn ~= nil and view.activeInn ~= view.innId then
+		Ui.text(rentalBody, string.format("You already rent a room at %s (%s left).", tostring(view.activeInnName), duration(view.secondsLeft)), 14, Ui.colors.red)
+		return
+	end
+	if view.activeInn == view.innId then
+		Ui.text(rentalBody, "Your room is yours for another " .. duration(view.secondsLeft) .. ".", 15, Ui.colors.silver)
+		if view.atDoor then
+			local innId = view.innId
+			Ui.primary(Ui.button(rentalBody, "Go to my room", function()
+				remotes.RentalRequest:FireServer("Enter", innId)
+				Ui.close()
+			end, 200))
+		end
+	end
+	local row = Ui.row(rentalBody)
+	local innId = view.innId
+	for _, days in ipairs({ 1, 3, view.maxDays }) do
+		local cost = days * view.pricePerDay
+		local label = string.format("%s %d day%s (%d gold)", if view.activeInn == view.innId then "Stay" else "Rent", days, if days == 1 then "" else "s", cost)
+		local button = Ui.button(row, label, function()
+			remotes.RentalRequest:FireServer("Rent", innId, days)
+		end, 140)
+		if view.gold < cost then
+			button.TextColor3 = Ui.colors.muted
+		end
+	end
+end
+Ui.onRefresh("Rentals", renderRentals)
+
 -- Guild desk (L-30, L-48, L-54) -----------------------------------------------------------------------
 local _, guildBody = Ui.window(gui, "GuildDesk", "Guild desk", 660, 660)
 local guildView: any = nil
@@ -899,6 +950,14 @@ remotes.OpenInterface.OnClientEvent:Connect(function(kind: string, data: any)
 		else
 			Ui.open("GuildDesk")
 		end
+	elseif kind == "Rentals" and type(data) == "table" then
+		rentalView = data
+		rememberPosition()
+		if Ui.isOpen("Rentals") then
+			Ui.refresh("Rentals")
+		else
+			Ui.open("Rentals")
+		end
 	elseif kind == "Property" and type(data) == "table" then
 		propertyView = data
 		confirming = false
@@ -943,7 +1002,7 @@ end)
 
 -- Walking away from the workshop or the vendor closes their window.
 RunService.Heartbeat:Connect(function()
-	if openedAt == nil or not (Ui.isOpen("Crafting") or Ui.isOpen("Vendor") or Ui.isOpen("CosmeticShop") or Ui.isOpen("Property") or Ui.isOpen("GuildDesk") or Ui.isOpen("ShopCounter") or Ui.isOpen("RiftDonations")) then
+	if openedAt == nil or not (Ui.isOpen("Crafting") or Ui.isOpen("Vendor") or Ui.isOpen("CosmeticShop") or Ui.isOpen("Property") or Ui.isOpen("Rentals") or Ui.isOpen("GuildDesk") or Ui.isOpen("ShopCounter") or Ui.isOpen("RiftDonations")) then
 		return
 	end
 	local root: any = player.Character and player.Character:FindFirstChild("HumanoidRootPart")

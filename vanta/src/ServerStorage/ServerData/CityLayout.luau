@@ -11,12 +11,13 @@
 -- gates on the wall, every door reachable from the gates, stairs fit, every location and property placed once).
 -- Entries keep the greybox fields (id, center, size, height, door, locationId, propertyId) and add:
 --   yaw      rotation in degrees (the footprint is size = local width x depth, turned about its centre)
---   use      what the building is (Townhouse, Shop, Inn, Apartments, Mansion, Warehouse, ...), drives its interior
+--   use      what the building is (Townhouse, Shop, Inn, Mansion, Warehouse, ...)
 --   stories  floors above ground (each FLOOR_HEIGHT studs)
 --   style    exterior palette (Market, Residential, Noble, Slum, Harbor, Craft, Royal)
 --   access   Public, Npc (an NPC's home or business), Sale (a player property), Guild, Royal, Quest
---   open     sides that face a street or yard (get windows; other sides are shared walls)
---   units    apartments: one property per floor { { propertyId, floor } }
+--   open     sides that face a street or yard
+--   template the house model an ordinary house is built from (TEMPLATES); its interior is instanced. Entries
+--            without one (public buildings, shops of note, warehouses) are built in place with a ground-floor room
 local Table = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared").Util.Table)
 
 local FLOOR_HEIGHT = 12
@@ -29,9 +30,6 @@ local seedState = 20261018
 local function nextUnit(): number
 	seedState = (seedState * 48271) % 2147483647
 	return seedState / 2147483647
-end
-local function between(min: number, max: number): number
-	return min + (max - min) * nextUnit()
 end
 local function integer(min: number, max: number): number
 	return math.min(max, min + math.floor(nextUnit() * (max - min + 1)))
@@ -95,6 +93,27 @@ end
 local BOUNDS = { minX = -480, maxX = 480, minZ = -520, maxZ = 320 }
 local WALL_THICKNESS = 8
 
+-- House models (templates): a few per district, reused for every lot. CityBuilder keeps one copy of each in
+-- ServerStorage.CityAssets.Houses (outside) and ServerStorage.CityAssets.Interiors (the room you enter), so they can
+-- be remodelled in Studio and every house built from them follows. w is the facade, d the depth (studs).
+local TEMPLATES: {[string]: any} = {
+	MarketA = { id = "MarketA", w = 22, d = 24, stories = 3, roof = "Eaves" },
+	MarketB = { id = "MarketB", w = 26, d = 24, stories = 3, roof = "Gable" },
+	MarketC = { id = "MarketC", w = 30, d = 26, stories = 3, roof = "Eaves" },
+	RingHouse = { id = "RingHouse", w = 20, d = 22, stories = 3, roof = "Gable" },
+	TownA = { id = "TownA", w = 22, d = 22, stories = 2, roof = "Eaves" },
+	TownB = { id = "TownB", w = 24, d = 22, stories = 3, roof = "Gable" },
+	TownC = { id = "TownC", w = 28, d = 24, stories = 2, roof = "Eaves" },
+	CraftA = { id = "CraftA", w = 24, d = 24, stories = 2, roof = "Eaves" },
+	CraftB = { id = "CraftB", w = 30, d = 26, stories = 2, roof = "Gable" },
+	HarborA = { id = "HarborA", w = 22, d = 22, stories = 2, roof = "Gable" },
+	HarborB = { id = "HarborB", w = 28, d = 24, stories = 3, roof = "Eaves" },
+	SlumA = { id = "SlumA", w = 16, d = 18, stories = 1, roof = "Eaves" },
+	SlumB = { id = "SlumB", w = 18, d = 18, stories = 2, roof = "Gable" },
+	Mansion = { id = "Mansion", w = 40, d = 30, stories = 3, roof = "Eaves" },
+	Manor = { id = "Manor", w = 34, d = 28, stories = 2, roof = "Eaves" },
+}
+
 local blocks = {}
 local roads = {}
 local ground = {}
@@ -147,6 +166,13 @@ local function zone(id: string, x0: number, x1: number, z0: number, z1: number, 
 	end
 	return entry
 end
+
+-- Gates in the city walls
+local GATES: {any} = {
+	{ id = "SouthGate", locationId = "SouthGate", center = { 0, BOUNDS.maxZ }, width = 24, kind = "Land" },
+	{ id = "NorthGate", locationId = "NorthGate", center = { 300, BOUNDS.minZ }, width = 20, kind = "Land" },
+	{ id = "SeaGate", center = { BOUNDS.maxX, 100 }, width = 80, kind = "Sea" },
+}
 
 -- Main roads: these stay clear of buildings and carry the city's traffic.
 road("SouthRoad", -7, 7, 50, 316, { width = "Main" })
@@ -229,6 +255,55 @@ for index, spot in ipairs({ { CASTLE.minX, CASTLE.minZ }, { CASTLE.maxX, CASTLE.
 	table.insert(blocks, entry)
 	reserve(entry)
 end
+
+-- Towers along the city walls (square, centred on the wall line), none beside a gate or where the castle's own
+-- towers stand. A tower stands 4 studs proud of the wall's inner face; houses keep a further 4 clear so the lane by the
+-- wall goes on round it.
+local TOWER_SPACING, TOWER_SIZE = 120, 16
+local WALL_TOWERS = {}
+do
+	local seen = {}
+	for _, side in ipairs({
+		{ alongX = true, fixed = BOUNDS.minZ, from = BOUNDS.minX, to = BOUNDS.maxX },
+		{ alongX = true, fixed = BOUNDS.maxZ, from = BOUNDS.minX, to = BOUNDS.maxX },
+		{ alongX = false, fixed = BOUNDS.minX, from = BOUNDS.minZ, to = BOUNDS.maxZ },
+		{ alongX = false, fixed = BOUNDS.maxX, from = BOUNDS.minZ, to = BOUNDS.maxZ },
+	}) do
+		local count = math.floor((side.to - side.from) / TOWER_SPACING)
+		for index = 0, count do
+			local along = side.from + (side.to - side.from) * index / count
+			local skip = false
+			for _, gate in ipairs(GATES) do
+				local gateAlong, gateAcross = gate.center[1], gate.center[2]
+				if not side.alongX then
+					gateAlong, gateAcross = gate.center[2], gate.center[1]
+				end
+				if gateAcross == side.fixed and math.abs(along - gateAlong) < gate.width / 2 + 14.5 then
+					skip = true
+				end
+			end
+			local x, z = along, side.fixed
+			if not side.alongX then
+				x, z = side.fixed, along
+			end
+			local key = string.format("%d,%d", math.floor(x), math.floor(z))
+			local half = TOWER_SIZE / 2
+			local tower: any = rect(x - half, x + half, z - half, z + half)
+			for _, other in ipairs(blocks) do
+				if overlaps(tower, other) then
+					skip = true
+				end
+			end
+			if not skip and not seen[key] then
+				seen[key] = true
+				tower.id = "WallTower" .. (#WALL_TOWERS + 1)
+				table.insert(WALL_TOWERS, tower)
+				reserve(rect(x - half - 4, x + half + 4, z - half - 4, z + half + 4))
+			end
+		end
+	end
+end
+
 zone("CastleCourtyardGround", -112, 112, -392, -340, { locationId = "CastleCourtyard", surface = "Courtyard" })
 zone("RoyalGardens", -112, -40, -458, -400, { surface = "Garden" })
 zone("RoyalGardensEast", 40, 112, -494, -470, { surface = "Garden" })
@@ -305,10 +380,8 @@ for _, column in ipairs({ { -460, -308 }, { -292, -138 } }) do
 				-- the house faces the street along the north or south edge of its plot
 				local door = if iz == 1 then "South" else "North"
 				estateIndex += 1
-				local width, depth = integer(36, 44), integer(30, 36)
-				if door == "East" or door == "West" then
-					width, depth = depth, width
-				end
+				local template = if estateIndex % 3 == 0 then TEMPLATES.Manor else TEMPLATES.Mansion
+				local width, depth = template.w, template.d
 				local saleable = estateIndex % 2 == 1 or estateIndex == 8
 				local id: string, fields: any
 				if saleable then
@@ -321,11 +394,12 @@ for _, column in ipairs({ { -460, -308 }, { -292, -138 } }) do
 				end
 				fields.door = door
 				fields.use = "Mansion"
+				fields.template = template.id
 				fields.style = "Noble"
 				fields.district = "NobleQuarter"
 				fields.open = { North = true, South = true, East = true, West = true }
 				fields.estate = { center = { cx, cz }, size = { plotW - 8, plotD - 8 } }
-				block(id, cx, cz, width, depth, integer(2, 3), fields)
+				block(id, cx, cz, width, depth, template.stories, fields)
 				zone(id .. "Garden", cx - (plotW - 8) / 2, cx + (plotW - 8) / 2, cz - (plotD - 8) / 2, cz + (plotD - 8) / 2, { surface = "Garden", keepClear = false })
 			end
 		end
@@ -337,55 +411,20 @@ road("NobleCross", -460, -138, -340, -334, { width = "Noble" })
 -- Dense streets: district grids, a ring of attached buildings around each block's courtyard
 --------------------------------------------------------------------------------------------------------------------
 local DISTRICTS: {[string]: any} = {
-	Market = { style = "Market", stories = { 3, 3, 3, 2 }, width = { 17, 25 }, depth = { 22, 26 }, sale = 0.35, shops = 0.75, district = "MerchantSquare" },
-	Residential = { style = "Residential", stories = { 2, 3, 3, 3 }, width = { 18, 25 }, depth = { 20, 25 }, sale = 0.8, shops = 0.15, district = "Residential" },
-	Royal = { style = "Residential", stories = { 3, 3, 2 }, width = { 20, 28 }, depth = { 22, 26 }, sale = 0.8, shops = 0.1, district = "Residential" },
-	Craft = { style = "Craft", stories = { 2, 2, 3 }, width = { 18, 26 }, depth = { 22, 26 }, sale = 0.6, shops = 0.6, district = "CraftsmanQuarter" },
-	Harbor = { style = "Harbor", stories = { 2, 2, 3 }, width = { 17, 24 }, depth = { 20, 24 }, sale = 0.7, shops = 0.3, district = "Harbor" },
-	Slum = { style = "Slum", stories = { 1, 2, 2, 2 }, width = { 13, 17 }, depth = { 18, 20 }, sale = 0.5, shops = 0.12, district = "Slums" },
+	Market = { style = "Market", templates = { "MarketA", "MarketB", "MarketC" }, sale = 0.5, district = "MerchantSquare" },
+	Residential = { style = "Residential", templates = { "TownA", "TownB", "TownC" }, sale = 0.8, district = "Residential" },
+	Royal = { style = "Residential", templates = { "TownB", "TownC" }, sale = 0.8, district = "Residential" },
+	Craft = { style = "Craft", templates = { "CraftA", "CraftB" }, sale = 0.6, district = "CraftsmanQuarter" },
+	Harbor = { style = "Harbor", templates = { "HarborA", "HarborB" }, sale = 0.7, district = "Harbor" },
+	Slum = { style = "Slum", templates = { "SlumA", "SlumB" }, sale = 0.5, district = "Slums" },
 }
-
-local SHOPS = {
-	Market = { "GeneralGoods", "Weapons", "Armor", "Tailor", "Bakery", "Butcher", "Potions", "MagicSupplies", "Jeweler", "Cobbler", "Blacksmith", "Tavern", "Grocer", "Bookbinder", "Chandler" },
-	Residential = { "Bakery", "Grocer", "Cobbler", "Tavern", "GeneralGoods", "Tailor" },
-	Royal = { "Jeweler", "Tailor", "MagicSupplies", "Bookbinder" },
-	Craft = { "Blacksmith", "Carpenter", "Tanner", "Weaver", "Workshop", "Workshop", "Armor", "Weapons" },
-	Harbor = { "Chandlery", "FishShop", "GeneralGoods", "Tavern", "Rope", "Storage" },
-	Slum = { "Pawnshop", "FoodStall", "Workshop", "Tavern" },
-}
-
-local SHOP_NAMES: {[string]: {string}} = {
-	GeneralGoods = { "Odds and Ends", "The Full Basket", "Merrow's Sundries" },
-	Weapons = { "Steel and Edge", "The Honest Blade", "Brannoc's Arms" },
-	Armor = { "The Iron Coat", "Plate and Mail", "Shieldwright" },
-	Tailor = { "Needle and Thread", "The Golden Spool", "Fine Cloth" },
-	Bakery = { "The Warm Loaf", "Oven and Hearth", "Sweetcrust" },
-	Butcher = { "Cleaver and Hook", "The Smoked Ham" },
-	Potions = { "Vials and Tinctures", "The Green Flask" },
-	MagicSupplies = { "Arcane Sundries", "The Wandering Star", "Runes and Reagents" },
-	Jeweler = { "Silver Setting", "The Gilded Ring" },
-	Cobbler = { "Sole and Heel", "The Cobbler's Last" },
-	Blacksmith = { "Hammerfall Smithy", "The Red Anvil", "Coalbrook Forge" },
-	Tavern = { "The Grey Goose", "The Three Crowns", "The Drunken Bard", "The Black Boar", "The Rusty Nail", "The Sleeping Hound" },
-	Grocer = { "Market Greens", "The Root Cellar" },
-	Bookbinder = { "Ink and Vellum", "The Bound Page" },
-	Chandler = { "Wick and Wax" },
-	Carpenter = { "The Joiner's Bench", "Oak and Adze" },
-	Tanner = { "Hide and Leather" },
-	Weaver = { "The Loom House" },
-	Workshop = { "Workshop" },
-	Chandlery = { "Ship's Chandlery" },
-	FishShop = { "Fresh Catch" },
-	Rope = { "Ropewalk" },
-	Storage = { "Storehouse" },
-	Pawnshop = { "Second Chances", "Old Moll's Pawn" },
-	FoodStall = { "Stew Pot", "Hot Pies" },
-}
-local nameCounters: {[string]: number} = {}
-local function shopName(kind: string): string
-	local names: {string} = SHOP_NAMES[kind] or { kind }
-	nameCounters[kind] = (nameCounters[kind] or 0) + 1
-	return names[(nameCounters[kind] - 1) % #names + 1]
+for _, district in pairs(DISTRICTS) do
+	local deepest, narrowest = 0, math.huge
+	for _, id in ipairs(district.templates) do
+		deepest = math.max(deepest, TEMPLATES[id].d)
+		narrowest = math.min(narrowest, TEMPLATES[id].w)
+	end
+	district.depth, district.minWidth = deepest, narrowest
 end
 
 local propertyCounters: {[string]: number} = {}
@@ -396,8 +435,8 @@ local function nextPropertyId(prefix: string): string
 end
 
 local generated = 0
-local FLAT_PREFIX = { Market = "MarketFlat", Residential = "TownFlat", Royal = "TownFlat", Craft = "CraftFlat", Harbor = "HarborFlat" }
-local function makeLot(kind: string, district: any, x0: number, x1: number, z0: number, z1: number, door: string, open: any)
+-- One house on a lot: the template's footprint, front on the street side of the row.
+local function makeLot(kind: string, district: any, template: any, x0: number, x1: number, z0: number, z1: number, door: string, open: any)
 	local entry: any = rect(x0, x1, z0, z1)
 	if not clear(entry) then
 		return
@@ -411,54 +450,36 @@ local function makeLot(kind: string, district: any, x0: number, x1: number, z0: 
 			return
 		end
 	end
-	local facade = if door == "North" or door == "South" then x1 - x0 else z1 - z0
-	local depth = if door == "North" or door == "South" then z1 - z0 else x1 - x0
-	local stories = pick(district.stories)
-	if depth < 20 then
-		stories = math.min(stories, 2)
-	end
-	if facade < 14 then
-		stories = math.min(stories, 2)
-	end
 	generated += 1
 	local id = string.format("%s%03d", kind, generated)
-	local fields: any = { door = door, style = district.style, district = district.district, open = open }
-	local roll = nextUnit()
-	if roll < district.shops then
-		local shop = pick(SHOPS[kind])
-		fields.use = if shop == "Tavern" then "Tavern" elseif shop == "Blacksmith" then "Smithy" else "Shop"
-		fields.shop = shop
-		fields.name = shopName(shop)
-		fields.access = "Npc"
-	elseif stories == 3 and facade >= 20 and depth >= 22 and kind ~= "Slum" and chance(0.35) then
-		fields.use = "Apartments"
-		fields.access = "Sale"
-		fields.units = {}
-		for floor = 0, 2 do
-			table.insert(fields.units, { propertyId = nextPropertyId(FLAT_PREFIX[kind]), floor = floor })
-		end
-	elseif chance(district.sale) then
-		fields.use = if kind == "Slum" then "Shack" else "Townhouse"
+	local fields: any = { door = door, style = district.style, district = district.district, open = open, template = template.id }
+	fields.use = if kind == "Slum" then "Shack" else "Townhouse"
+	if chance(district.sale) then
 		fields.access = "Sale"
 		fields.propertyId = nextPropertyId(PROPERTY_PREFIX[kind])
 	else
-		fields.use = if kind == "Slum" then "Shack" else "Townhouse"
 		fields.access = "Npc"
 	end
-	block(id, entry.center[1], entry.center[2], entry.size[1], entry.size[2], stories, fields)
+	block(id, entry.center[1], entry.center[2], entry.size[1], entry.size[2], template.stories, fields)
 end
 
--- Splits a run [a, b] into lot widths between min and max, the last one absorbing the remainder.
-local function split(a: number, b: number, minWidth: number, maxWidth: number): {{number}}
+-- Fills a run [a, b] with templates; what is left at the end (narrower than any template) stays an alley.
+local function fill(a: number, b: number, district: any): {any}
 	local out = {}
 	local cursor = a
-	while b - cursor >= minWidth do
-		local width = math.floor(between(minWidth, maxWidth) + 0.5)
-		if b - cursor - width < minWidth then
-			width = b - cursor
+	while true do
+		local fits = {}
+		for _, id in ipairs(district.templates) do
+			if TEMPLATES[id].w <= b - cursor then
+				table.insert(fits, TEMPLATES[id])
+			end
 		end
-		table.insert(out, { cursor, cursor + width })
-		cursor += width
+		if #fits == 0 then
+			break
+		end
+		local template = pick(fits)
+		table.insert(out, { from = cursor, to = cursor + template.w, template = template })
+		cursor += template.w
 	end
 	return out
 end
@@ -468,52 +489,43 @@ local courtyards = 0
 local function streetBlock(kind: string, x0: number, x1: number, z0: number, z1: number)
 	local district = DISTRICTS[kind]
 	local width, height = x1 - x0, z1 - z0
-	if width < 14 or height < 16 then
+	local depth = district.depth
+	if width < district.minWidth or height < depth then
 		return
 	end
-	local depth = integer(district.depth[1], district.depth[2])
 	local twoRowsZ = height >= depth * 2 + 6
-	local twoRowsX = width >= depth * 2 + 6
-	local nDepth = if twoRowsZ then depth else height
-	local sDepth = if twoRowsZ then depth else 0
-	-- north and south rows (they own the corners)
-	local alleyGap = if twoRowsZ and width > 60 then integer(1, 2) else 0
-	for _, row in ipairs({ { a = z0, b = z0 + nDepth, door = "North" }, { a = z1 - sDepth, b = z1, door = "South" } }) do
-		if row.b - row.a >= 14 then
-			local lots = split(x0, x1, district.width[1], district.width[2])
-			for index, lot in ipairs(lots) do
-				local isGap = alleyGap > 0 and row.door == "South" and index == math.max(2, math.floor(#lots / 2)) and #lots >= 4
-				if isGap then
-					-- an alley into the courtyard: a narrow passage, then the rest of the lot as a smaller house
-					local passage = 5
-					if lot[2] - lot[1] - passage >= 12 then
-						makeLot(kind, district, lot[1] + passage, lot[2], row.a, row.b, row.door, { [row.door] = true, West = true })
-					end
-				else
-					local open = { [row.door] = true }
-					if index == 1 then
-						open.West = true
-					end
-					if index == #lots then
-						open.East = true
-					end
-					if twoRowsZ then
-						open[if row.door == "North" then "South" else "North"] = true
-					end
-					makeLot(kind, district, lot[1], lot[2], row.a, row.b, row.door, open)
-				end
+	local twoRowsX = width >= depth * 2 + district.minWidth
+	-- north and south rows (they own the corners); each house sits against its street, a yard behind it
+	local rows = { { door = "North", street = z0 } }
+	if twoRowsZ then
+		table.insert(rows, { door = "South", street = z1 })
+	end
+	for _, row in ipairs(rows) do
+		local lots = fill(x0, x1, district)
+		for index, lot in ipairs(lots) do
+			local d = lot.template.d
+			local a, b = if row.door == "North" then row.street else row.street - d, if row.door == "North" then row.street + d else row.street
+			local open = { [row.door] = true, [if row.door == "North" then "South" else "North"] = true }
+			if index == 1 then
+				open.West = true
 			end
+			if index == #lots then
+				open.East = true
+			end
+			makeLot(kind, district, lot.template, lot.from, lot.to, a, b, row.door, open)
 		end
 	end
 	-- west and east rows between them
 	if twoRowsZ and twoRowsX then
-		local zA, zB = z0 + nDepth, z1 - sDepth
-		for _, row in ipairs({ { a = x0, b = x0 + depth, door = "West" }, { a = x1 - depth, b = x1, door = "East" } }) do
-			for _, lot in ipairs(split(zA, zB, district.width[1], district.width[2])) do
-				makeLot(kind, district, row.a, row.b, lot[1], lot[2], row.door, { [row.door] = true, [if row.door == "West" then "East" else "West"] = true })
+		local zA, zB = z0 + depth, z1 - depth
+		for _, row in ipairs({ { door = "West", street = x0 }, { door = "East", street = x1 } }) do
+			for _, lot in ipairs(fill(zA, zB, district)) do
+				local d = lot.template.d
+				local a, b = if row.door == "West" then row.street else row.street - d, if row.door == "West" then row.street + d else row.street
+				makeLot(kind, district, lot.template, a, b, lot.from, lot.to, row.door, { [row.door] = true, [if row.door == "West" then "East" else "West"] = true })
 			end
 		end
-		local cx0, cx1, cz0, cz1 = x0 + depth, x1 - depth, z0 + nDepth, z1 - sDepth
+		local cx0, cx1, cz0, cz1 = x0 + depth, x1 - depth, z0 + depth, z1 - depth
 		if cx1 - cx0 >= 8 and cz1 - cz0 >= 6 then
 			courtyards += 1
 			zone(string.format("Courtyard%03d", courtyards), cx0, cx1, cz0, cz1, { surface = if kind == "Slum" then "Alley" else "Yard", keepClear = false, district = kind })
@@ -556,8 +568,8 @@ do
 	local angle = 0
 	local ringIndex = 0
 	while angle < 360 do
-		local width = integer(13, 17)
-		local depth = 22
+		local width = TEMPLATES.RingHouse.w
+		local depth = TEMPLATES.RingHouse.d
 		local halfSpan = math.deg(math.asin((width / 2) / ringRadius))
 		local center = angle + halfSpan
 		if inMouth(center, halfSpan) then
@@ -568,18 +580,15 @@ do
 			if clear(entry) then
 				ringIndex += 1
 				generated += 1
-				local shop = SHOPS.Market[(ringIndex - 1) % #SHOPS.Market + 1]
-				block(string.format("SquareRing%02d", ringIndex), x, z, width, depth, 3, {
-					yaw = yaw,
-					door = "South",
-					use = if shop == "Tavern" then "Tavern" elseif shop == "Blacksmith" then "Smithy" else "Shop",
-					shop = shop,
-					name = shopName(shop),
-					style = "Market",
-					access = "Npc",
-					district = "MerchantSquare",
-					open = { South = true, North = true },
-				})
+				-- tall town houses face the square; every other one can be bought
+				local fields: any = { yaw = yaw, door = "South", style = "Market", district = "MerchantSquare", open = { South = true, North = true }, template = "RingHouse", use = "Townhouse" }
+				if ringIndex % 2 == 0 then
+					fields.access = "Sale"
+					fields.propertyId = nextPropertyId("MarketHouse")
+				else
+					fields.access = "Npc"
+				end
+				block(string.format("SquareRing%02d", ringIndex), x, z, width, depth, 3, fields)
 				angle += halfSpan * 2 + 0.4
 			else
 				angle += 0.5
@@ -629,14 +638,14 @@ local SPAWN = { -120, -78 }
 
 local layout: any = {
 	floorHeight = FLOOR_HEIGHT,
+	templates = TEMPLATES,
+	-- instanced interiors are built far above the map, one slot per house that someone is inside
+	interiors = { origin = { 3000, 800, -1500 }, spacing = 80, perRow = 16 },
 	bounds = BOUNDS,
-	walls = { thickness = WALL_THICKNESS, height = 30, towerSpacing = 120 },
+	walls = { thickness = WALL_THICKNESS, height = 30, towerSpacing = TOWER_SPACING, towerSize = TOWER_SIZE },
+	wallTowers = WALL_TOWERS,
 	door = { width = 6, height = 9 },
-	gates = ({
-		{ id = "SouthGate", locationId = "SouthGate", center = { 0, BOUNDS.maxZ }, width = 24, kind = "Land" },
-		{ id = "NorthGate", locationId = "NorthGate", center = { 300, BOUNDS.minZ }, width = 20, kind = "Land" },
-		{ id = "SeaGate", center = { BOUNDS.maxX, 100 }, width = 80, kind = "Sea" },
-	} :: {any}),
+	gates = GATES,
 	water = { { id = "Harbour", center = { (WATER.minX + WATER.maxX) / 2, (WATER.minZ + WATER.maxZ) / 2 }, size = { WATER.maxX - WATER.minX, WATER.maxZ - WATER.minZ }, level = -2, depth = 16 } },
 	piers = { { z = -96, length = 70 }, { z = -20, length = 74 }, { z = 60, length = 60 }, { z = 136, length = 74 }, { z = 206, length = 66 }, { z = 270, length = 56 } },
 	ships = {

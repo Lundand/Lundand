@@ -16,9 +16,9 @@ local function has(problems: {string}, text: string): boolean
 	return false
 end
 
-local RESIDENTIAL = { Townhouse = true, Shack = true, Apartments = true, Mansion = true }
+local RESIDENTIAL = { Townhouse = true, Shack = true, Mansion = true }
 -- public institutions, essential businesses and story places: never for sale
-local NOT_FOR_SALE = { Church = true, Guild = true, Inn = true, Tavern = true, SlumTavern = true, Keep = true, Library = true, Barracks = true, Chancery = true, Servants = true, Customs = true, FishMarket = true, Office = true, Forge = true, Apothecary = true, CraftGuild = true, Fountain = true, Smithy = true, Shop = true, Warehouse = true }
+local NOT_FOR_SALE = { Church = true, Guild = true, Inn = true, Tavern = true, SlumTavern = true, Keep = true, Library = true, Barracks = true, Chancery = true, Servants = true, Customs = true, FishMarket = true, Office = true, Forge = true, Apothecary = true, CraftGuild = true, Fountain = true, Warehouse = true }
 
 return function(t)
 	t.test("the shipped city layout is valid", function()
@@ -31,7 +31,6 @@ return function(t)
 			if entry.propertyId then
 				properties += 1
 			end
-			properties += #(entry.units or {})
 			if entry.locationId then
 				locations += 1
 			end
@@ -43,7 +42,7 @@ return function(t)
 	t.test("most ordinary homes are for sale, and only buildings marked for sale have deeds", function()
 		local homes, forSale = 0, 0
 		for _, entry in ipairs(Layout.blocks) do
-			local hasDeed = entry.propertyId ~= nil or entry.units ~= nil
+			local hasDeed = entry.propertyId ~= nil
 			if entry.access == "Sale" then
 				t.truthy(hasDeed, entry.id .. " is for sale without a deed")
 			elseif entry.access ~= "Guild" then
@@ -64,7 +63,6 @@ return function(t)
 		for _, entry in ipairs(Layout.blocks) do
 			if NOT_FOR_SALE[entry.use] then
 				t.equal(entry.propertyId, nil, entry.id)
-				t.equal(entry.units, nil, entry.id)
 			end
 		end
 		for _, id in ipairs({ "Church", "AdventurersGuild", "SquareInn", "CastleKeep", "RoyalLibrary", "CrookedLantern" }) do
@@ -77,6 +75,36 @@ return function(t)
 			end
 			t.truthy(found, id .. " is in the city")
 		end
+	end)
+
+	t.test("the NPCs keep only a few shops: the economy belongs to the players", function()
+		local shops = 0
+		for _, entry in ipairs(Layout.blocks) do
+			if entry.use == "Shop" or entry.use == "Smithy" then
+				shops += 1
+			end
+		end
+		t.equal(shops, 0, "no generated NPC shops; the forge and the apothecary sell the starter gear")
+	end)
+
+	t.test("houses match their models, and every inn has a room to rent", function()
+		for _, entry in ipairs(Layout.blocks) do
+			if entry.use == "Townhouse" or entry.use == "Shack" or entry.use == "Mansion" then
+				t.truthy(entry.template ~= nil, entry.id .. " is built from a house model")
+			end
+		end
+		local sizes = {}
+		for innId, inn in pairs(Content.world.inns) do
+			local placed = false
+			for _, entry in ipairs(Layout.blocks) do
+				if entry.locationId == inn.locationId then
+					placed = true
+				end
+			end
+			t.truthy(placed, innId .. " stands in the city")
+			sizes[innId] = inn.room[1] * inn.room[2]
+		end
+		t.truthy(sizes.CrookedLantern < sizes.SailorsTavern and sizes.SailorsTavern < sizes.SquareInn, "the slums' room is the smallest")
 	end)
 
 	t.test("the hideout is reached from inside the slums", function()

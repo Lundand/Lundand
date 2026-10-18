@@ -141,7 +141,7 @@ local function runAction(player: Player, action: any, npcId: string)
 			notify(player, "The crystal hums quietly. Contributions open with the first Rift event.")
 		end
 	elseif kind == "OpenRentals" then
-		Remotes.get("OpenInterface"):FireClient(player, "Rentals", { innId = action.innId })
+		services.RentalService.open(player, action.innId)
 	end
 end
 

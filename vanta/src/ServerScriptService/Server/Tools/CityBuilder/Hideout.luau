@@ -100,16 +100,21 @@ function Hideout.build(layout: any, root: Instance, tavern: any): Folder
 	addOpening(entrance.id, "North", landingX, cellarY, cellarY + 8, 5)
 	-- landing in the entrance room at cellar level, then the long stair down along it
 	local landingZ1 = ez0 + 4
-	f:box("Landing", Vector3.new(8, 1, landingZ1 - cz1), landingX, cellarY - 0.5, (cz1 + landingZ1) / 2, rgb(110, 90, 66), M.WoodPlanks)
+	f:box("Landing", Vector3.new(8, 1, landingZ1 - ez0), landingX, cellarY - 0.5, (ez0 + landingZ1) / 2, rgb(110, 90, 66), M.WoodPlanks)
 	local flightZLow = ez0 + 4 + math.abs(cellarY - spec.floorY) * 1.1
 	Kit.flight(f, "HideoutStairs", landingX - 3, landingX + 3, flightZLow, landingZ1, spec.floorY, cellarY, rgb(110, 90, 66), rgb(80, 64, 48))
 	f:box("StairRail", Vector3.new(0.3, 3, flightZLow - landingZ1), landingX - 3, cellarY + 1.5 - 8, (flightZLow + landingZ1) / 2, C.darkWood, M.Wood, NO)
 	-- the passage between cellar and entrance room (it crosses the gap between them)
-	f:box("PassageFloor", Vector3.new(6, 1, cz1 - cz1 + (ez0 - cz1) + 0.01), landingX, cellarY - 0.5, (cz1 + ez0) / 2, floorColor, M.Slate)
+	-- the passage fills the gap between the two rooms' walls (each 1 stud thick, outside its room); the openings in
+	-- those walls make the rest of the way through
+	local p0, p1 = cz1 + 1, ez0 - 1
+	f:box("PassageFloor", Vector3.new(5, 1, p1 - p0), landingX, cellarY - 0.5, (p0 + p1) / 2, floorColor, M.Slate)
 	for _, s in ipairs({ -1, 1 }) do
-		f:box("PassageWall", Vector3.new(1, 8, ez0 - cz1 + 0.01), landingX + s * 3, cellarY + 4, (cz1 + ez0) / 2, wallColor, M.Cobblestone)
+		f:box("PassageWall", Vector3.new(1, 8, p1 - p0), landingX + s * 3, cellarY + 4, (p0 + p1) / 2, wallColor, M.Cobblestone)
 	end
-	f:box("PassageCeiling", Vector3.new(7, 1, ez0 - cz1 + 0.01), landingX, cellarY + 8.5, (cz1 + ez0) / 2, wallColor, M.Cobblestone)
+	f:box("PassageCeiling", Vector3.new(7, 1, p1 - p0), landingX, cellarY + 8.5, (p0 + p1) / 2, wallColor, M.Cobblestone)
+	-- the cellar's floor reaches the doorway; a short sill bridges the wall openings
+	f:box("DoorSill", Vector3.new(5, 1, 1), landingX, cellarY - 0.5, cz1 + 0.5, floorColor, M.Slate, NO)
 	-- the wine rack that hides the way, swung aside
 	f:boxAt("SwungRack", Vector3.new(5, 7, 1.2), CFrame.new(landingX - 4.5, cellarY + 3.5, cz1 - 2.2) * CFrame.Angles(0, math.rad(70), 0), C.darkWood, M.Wood, NO)
 
@@ -213,7 +218,7 @@ function Hideout.build(layout: any, root: Instance, tavern: any): Folder
 			place(f, cx, y, z1 - 4, 180, function(g)
 				g:box("Dais", Vector3.new(10, 1, 7), 0, 0.5, 0, rgb(80, 70, 64), M.Cobblestone)
 				g:box("Seat", Vector3.new(4, 2.4, 3), 0, 2.2, 0.4, rgb(90, 60, 40), M.Wood)
-				g:box("SeatBack", Vector3.new(4, 6, 0.8), 0, 4.4, 1.8, rgb(90, 60, 40), M.Wood, NO)
+				g:box("SeatBack", Vector3.new(3.8, 6, 0.8), 0, 4.4, 1.8, rgb(90, 60, 40), M.Wood, NO)
 			end)
 			place(f, cx, y, z1 - 0.6, 180, function(g)
 				Furniture.banner(g, rgb(110, 20, 24), 7)
@@ -231,16 +236,33 @@ function Hideout.build(layout: any, root: Instance, tavern: any): Folder
 	end
 	for _, t in ipairs(tunnels) do
 		local y = spec.floorY
-		local length = if t.alongX then t.x1 - t.x0 else t.z1 - t.z0
-		if length > 0.05 then
-			Kit.slab(f, "TunnelFloor", { x0 = t.x0, x1 = t.x1, z0 = t.z0, z1 = t.z1 }, y, 1, nil, floorColor, M.Slate)
-			Kit.slab(f, "TunnelCeiling", { x0 = t.x0, x1 = t.x1, z0 = t.z0, z1 = t.z1 }, y + TUNNEL_HEIGHT + 1, 1, nil, wallColor, M.Cobblestone)
+		-- a tunnel runs between the two rooms' walls (each wall is 1 stud thick, outside its room)
+		local x0, x1, z0, z1 = t.x0, t.x1, t.z0, t.z1
+		if t.alongX then
+			x0, x1 = x0 + 1, x1 - 1
+		else
+			z0, z1 = z0 + 1, z1 - 1
+		end
+		local length = if t.alongX then x1 - x0 else z1 - z0
+		-- sills fill the floor where the tunnel passes through each room's wall
+		for _, edge in ipairs({ -1, 1 }) do
 			if t.alongX then
-				f:box("TunnelWall", Vector3.new(length, TUNNEL_HEIGHT, 1), (t.x0 + t.x1) / 2, y + TUNNEL_HEIGHT / 2, t.z0 - 0.5, wallColor, M.Cobblestone)
-				f:box("TunnelWall", Vector3.new(length, TUNNEL_HEIGHT, 1), (t.x0 + t.x1) / 2, y + TUNNEL_HEIGHT / 2, t.z1 + 0.5, wallColor, M.Cobblestone)
+				local x = if edge < 0 then t.x0 + 0.5 else t.x1 - 0.5
+				f:box("TunnelSill", Vector3.new(1, 1, t.z1 - t.z0), x, y - 0.5, (t.z0 + t.z1) / 2, floorColor, M.Slate)
 			else
-				f:box("TunnelWall", Vector3.new(1, TUNNEL_HEIGHT, length), t.x0 - 0.5, y + TUNNEL_HEIGHT / 2, (t.z0 + t.z1) / 2, wallColor, M.Cobblestone)
-				f:box("TunnelWall", Vector3.new(1, TUNNEL_HEIGHT, length), t.x1 + 0.5, y + TUNNEL_HEIGHT / 2, (t.z0 + t.z1) / 2, wallColor, M.Cobblestone)
+				local z = if edge < 0 then t.z0 + 0.5 else t.z1 - 0.5
+				f:box("TunnelSill", Vector3.new(t.x1 - t.x0, 1, 1), (t.x0 + t.x1) / 2, y - 0.5, z, floorColor, M.Slate)
+			end
+		end
+		if length > 0.05 then
+			Kit.slab(f, "TunnelFloor", { x0 = x0, x1 = x1, z0 = z0, z1 = z1 }, y, 1, nil, floorColor, M.Slate)
+			Kit.slab(f, "TunnelCeiling", { x0 = x0, x1 = x1, z0 = z0, z1 = z1 }, y + TUNNEL_HEIGHT + 1, 1, nil, wallColor, M.Cobblestone)
+			if t.alongX then
+				f:box("TunnelWall", Vector3.new(length, TUNNEL_HEIGHT, 1), (x0 + x1) / 2, y + TUNNEL_HEIGHT / 2, z0 - 0.5, wallColor, M.Cobblestone)
+				f:box("TunnelWall", Vector3.new(length, TUNNEL_HEIGHT, 1), (x0 + x1) / 2, y + TUNNEL_HEIGHT / 2, z1 + 0.5, wallColor, M.Cobblestone)
+			else
+				f:box("TunnelWall", Vector3.new(1, TUNNEL_HEIGHT, length), x0 - 0.5, y + TUNNEL_HEIGHT / 2, (z0 + z1) / 2, wallColor, M.Cobblestone)
+				f:box("TunnelWall", Vector3.new(1, TUNNEL_HEIGHT, length), x1 + 0.5, y + TUNNEL_HEIGHT / 2, (z0 + z1) / 2, wallColor, M.Cobblestone)
 			end
 		end
 	end

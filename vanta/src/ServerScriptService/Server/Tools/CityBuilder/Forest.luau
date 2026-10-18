@@ -94,10 +94,10 @@ local function ruin(f: Frame, spec: any)
 	if spec.kind == "Cabin" then
 		-- a hunter's cabin, roof fallen in, door gone
 		f:box("CabinFloor", Vector3.new(16, 0.6, 12), x, 0.3, z, rgb(110, 86, 60), M.WoodPlanks)
-		f:box("CabinWall", Vector3.new(16, 7, 1), x, 3.5, z - 5.5, wood, M.WoodPlanks)
-		f:box("CabinWall", Vector3.new(1, 5, 12), x - 7.5, 2.5, z, wood, M.WoodPlanks)
-		f:box("CabinWall", Vector3.new(1, 3, 6), x + 7.5, 1.5, z - 3, wood, M.WoodPlanks)
-		f:box("CabinWall", Vector3.new(5, 7, 1), x - 5.5, 3.5, z + 5.5, wood, M.WoodPlanks)
+		f:box("CabinWall", Vector3.new(15.8, 7, 1), x, 3.5, z - 5.5, wood, M.WoodPlanks)
+		f:box("CabinWall", Vector3.new(1, 5, 10), x - 7.4, 2.5, z, wood, M.WoodPlanks)
+		f:box("CabinWall", Vector3.new(1, 3, 5.5), x + 7.4, 1.5, z - 2.25, wood, M.WoodPlanks)
+		f:box("CabinWall", Vector3.new(4.8, 7, 1), x - 5.3, 3.5, z + 5.4, wood, M.WoodPlanks)
 		f:boxAt("FallenRoof", Vector3.new(14, 0.6, 8), CFrame.new(x + 1, 3, z - 1) * CFrame.Angles(math.rad(25), 0, math.rad(8)), rgb(90, 76, 60), M.WoodPlanks)
 		f:box("Hearth", Vector3.new(4, 4, 2), x - 5, 2, z - 4.4, stone, M.Cobblestone)
 	elseif spec.kind == "Watchtower" then
@@ -136,7 +136,9 @@ function Forest.build(layout: any, root: Instance): Folder
 			local a, c = line[index], line[index + 1]
 			local dx, dz = c[1] - a[1], c[2] - a[2]
 			local length = math.sqrt(dx * dx + dz * dz)
-			local seg = f:boxAt("Trail", Vector3.new(width, 0.2, length + width * 0.6), CFrame.new((a[1] + c[1]) / 2, 0.02, (a[2] + c[2]) / 2) * CFrame.Angles(0, math.atan2(dx, dz), 0), rgb(122, 98, 70), M.Ground)
+			-- joints overlap, so neighbouring segments sit at different heights (no flicker where they cross)
+			local lift = (index % 2) * 0.08 + (if width < 8 then 0.16 else 0)
+			local seg = f:boxAt("Trail", Vector3.new(width, 0.2, length + width * 0.6), CFrame.new((a[1] + c[1]) / 2, 0.02 + lift, (a[2] + c[2]) / 2) * CFrame.Angles(0, math.atan2(dx, dz), 0), rgb(122, 98, 70), M.Ground)
 			seg.CastShadow = false
 		end
 	end
@@ -231,17 +233,16 @@ function Forest.build(layout: any, root: Instance): Folder
 			f:box("CaveRock", Vector3.new(30, 18, 14), cx + 10, 9, cz + 30, rgb(96, 94, 90), M.Slate)
 			f:box("CaveMouth", Vector3.new(8, 7, 0.4), cx + 10, 3.5, cz + 22.8, rgb(18, 16, 16), M.SmoothPlastic, NO)
 			for k = 0, 5 do
-				f:boxAt("Bone", Vector3.new(0.4, 0.4, 2), CFrame.new(cx + rng.range(-10, 10), 0.2, cz + rng.range(-10, 10)) * CFrame.Angles(0, rng.unit() * 6, 0), rgb(232, 226, 210), M.SmoothPlastic, NO)
-				local _ = k
+				f:boxAt("Bone", Vector3.new(0.4, 0.4, 2), CFrame.new(cx + rng.range(-10, 10), 0.2 + k * 0.05, cz + rng.range(-10, 10)) * CFrame.Angles(0, rng.unit() * 6, 0), rgb(232, 226, 210), M.SmoothPlastic, NO)
 			end
 		end
 	end
 	-- outbuildings by the gate: the city gives way to fields
 	local shed = Kit.frame(folder, CFrame.new(-44, 0, 360))
 	shed:box("ShedFloor", Vector3.new(14, 0.6, 10), 0, 0.3, 0, rgb(110, 86, 60), M.WoodPlanks)
-	shed:box("ShedWall", Vector3.new(14, 7, 0.8), 0, 3.5, -4.6, rgb(120, 92, 62), M.WoodPlanks)
+	shed:box("ShedWall", Vector3.new(13.8, 6.4, 0.8), 0, 3.8, -4.6, rgb(120, 92, 62), M.WoodPlanks)
 	for _, s in ipairs({ -1, 1 }) do
-		shed:box("ShedWall", Vector3.new(0.8, 7, 10), s * 6.6, 3.5, 0, rgb(120, 92, 62), M.WoodPlanks)
+		shed:box("ShedWall", Vector3.new(0.8, 6.9, 9), s * 6.5, 3.55, 0.3, rgb(120, 92, 62), M.WoodPlanks)
 	end
 	shed:wedgeAt("ShedRoof", Vector3.new(15, 3, 11), CFrame.new(0, 8.5, 0) * CFrame.Angles(0, math.pi, 0), rgb(110, 84, 64), M.WoodPlanks)
 	for k = 0, 7 do
