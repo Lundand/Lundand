@@ -1,5 +1,5 @@
 --!strict
--- Hand-shaped landmarks: the square's fountain with the Heart of Realms, the church (spawn and awakening), the
+-- Hand-shaped landmarks: the Heart of Realms crystal at the centre of the square, the church (spawn and awakening), the
 -- castle (keep with throne hall, Royal Library, curtain walls, towers, gatehouse) and the harbour fish market.
 -- Each works in its block's frame, front (door side) towards +z, like Shell.
 local Kit = require(script.Parent.Kit)
@@ -71,39 +71,50 @@ end
 Landmarks.banner = lundandBanner
 
 --------------------------------------------------------------------------------------------------------------------
--- The central fountain: an octagonal basin, a carved pillar, and the Heart of Realms crystal above the water
+-- The Heart of Realms (L-27 lore): the crystal the whole story turns on, at the centre of the square. A stepped dais,
+-- a ring of rune stones and eight obelisks round it, and the crystal floating above, shards growing at its foot.
 --------------------------------------------------------------------------------------------------------------------
-function Landmarks.fountain(entry: any, parent: Instance): Model
+function Landmarks.heartOfRealms(entry: any, parent: Instance): Model
 	local model = Kit.model(parent, entry.id)
 	local f = Kit.frame(model, CFrame.new(entry.center[1], 0, entry.center[2]))
-	local stone = rgb(214, 208, 194)
+	local stone, darkStone = rgb(214, 208, 194), rgb(150, 146, 140)
+	local glow = rgb(140, 175, 255)
 	local r = entry.size[1] / 2
+	-- the dais: three round steps
+	f:cyl("Dais", 0.8, r * 2, 0, 0, 0, darkStone, M.Slate)
+	f:cyl("Dais", 0.8, r * 2 - 5, 0, 0.8, 0, stone, M.Marble)
+	f:cyl("Dais", 0.8, r * 2 - 10, 0, 1.6, 0, stone, M.Marble)
+	local top = 2.4
+	-- eight obelisks on the lowest step, each with a glowing rune near its tip
 	for index = 0, 7 do
 		local a = index * math.pi / 4
-		local cf = CFrame.Angles(0, a, 0) * CFrame.new(0, 1.3, r - 0.9)
-		local side = 2 * r * math.tan(math.pi / 8) + 0.2
-		-- neighbouring segments differ a little in height, so the corners where they overlap never flicker
-		local lift = (index % 2) * 0.12
-		f:boxAt("Basin", Vector3.new(side, 2.6 + lift, 1.8), cf * CFrame.new(0, lift / 2, 0), stone, M.Marble)
-		f:boxAt("BasinLip", Vector3.new(side + 0.4, 0.4, 2.4), cf * CFrame.new(0, 1.5 + lift, 0), rgb(226, 222, 210), M.Marble)
+		local at = CFrame.Angles(0, a, 0) * CFrame.new(0, 0, r - 1.25)
+		f:boxAt("Obelisk", Vector3.new(1.2, 5, 1.2), at * CFrame.new(0, 0.8 + 2.5, 0), darkStone, M.Slate)
+		-- two wedges, tall sides meeting in the middle: a pointed cap
+		f:wedgeAt("ObeliskTip", Vector3.new(1.2, 0.8, 0.6), at * CFrame.new(0, 5.8 + 0.4, 0.3) * CFrame.Angles(0, math.pi, 0), darkStone, M.Slate, NO)
+		f:wedgeAt("ObeliskTip", Vector3.new(1.2, 0.8, 0.6), at * CFrame.new(0, 5.8 + 0.4, -0.3), darkStone, M.Slate, NO)
+		local rune = f:boxAt("ObeliskRune", Vector3.new(0.6, 0.6, 0.1), at * CFrame.new(0, 4.6, -0.65), glow, M.Neon, NO)
+		rune.CastShadow = false
 	end
-	f:cyl("BasinFloor", 0.6, entry.size[1] - 2, 0, 0, 0, rgb(150, 160, 160), M.Slate)
-	local water = f:cyl("Water", 0.2, entry.size[1] - 3, 0, 2, 0, rgb(80, 140, 170), M.Glass, { collide = false, query = false, transparency = 0.35, shadow = false })
-	water.Name = "FountainWater"
-	f:cyl("Pillar", 9, 3.6, 0, 0.6, 0, stone, M.Marble)
-	f:cyl("PillarBand", 0.6, 4.4, 0, 3, 0, rgb(180, 170, 150), M.Marble, NO)
-	f:cyl("UpperBowl", 1, 9, 0, 8.6, 0, stone, M.Marble)
-	f:cyl("UpperWater", 0.2, 8, 0, 9.5, 0, rgb(80, 140, 170), M.Glass, { collide = false, query = false, transparency = 0.35 })
-	-- four carved spouts
-	for index = 0, 3 do
-		local a = index * math.pi / 2
-		f:boxAt("Spout", Vector3.new(0.8, 0.8, 2), CFrame.Angles(0, a, 0) * CFrame.new(0, 8.2, 2.4), rgb(170, 160, 140), M.Marble, NO)
+	-- rune stones set round the top step
+	for index = 0, 11 do
+		local a = index * math.pi / 6
+		local rune = f:boxAt("RuneStone", Vector3.new(0.8, 0.12, 0.8), CFrame.Angles(0, a, 0) * CFrame.new(0, top + 0.06, 4.2) * CFrame.Angles(0, math.rad(45), 0), glow, M.Neon, NO)
+		rune.CastShadow = false
 	end
-	f:cyl("CrystalSeat", 1.4, 3, 0, 9.6, 0, rgb(180, 170, 150), M.Marble)
-	-- the Heart of Realms (L-27 lore): RiftService finds it by LocationId and lights it up during rift events
-	local heart = f:boxAt("HeartOfRealms", Vector3.new(3.2, 7, 3.2), CFrame.new(0, 14.5, 0) * CFrame.Angles(0, math.rad(45), 0), rgb(150, 170, 230), M.Glass, { transparency = 0.15 })
+	-- shards of crystal growing out of the dais
+	for index = 0, 4 do
+		local a = index * math.pi * 2 / 5 + 0.3
+		local h = 2.4 + (index % 3) * 0.8
+		local shard = f:boxAt("CrystalShard", Vector3.new(0.9, h, 0.9), CFrame.Angles(0, a, 0) * CFrame.new(0, top + h / 2 - 0.3, 2.4) * CFrame.Angles(math.rad(22), 0, math.rad(45)), glow, M.Glass, { transparency = 0.2 })
+		shard.CastShadow = false
+	end
+	-- the Heart itself, floating above the dais with a bright core: RiftService finds it by its LocationId
+	local heart = f:boxAt("HeartOfRealms", Vector3.new(3.6, 10, 3.6), CFrame.new(0, top + 1.8 + 5, 0) * CFrame.Angles(0, math.rad(45), 0), rgb(150, 180, 255), M.Glass, { transparency = 0.15 })
 	heart:SetAttribute("LocationId", "HeartOfRealms")
-	Kit.light(heart, rgb(150, 170, 255), 18, 0.8)
+	local core = f:boxAt("HeartCore", Vector3.new(1.2, 6, 1.2), CFrame.new(0, top + 1.8 + 5, 0) * CFrame.Angles(0, math.rad(45), 0), rgb(200, 220, 255), M.Neon, NO)
+	core.CastShadow = false
+	Kit.light(heart, glow, 32, 1.4)
 	model:SetAttribute("LocationId", "HeartOfRealms")
 	return model
 end

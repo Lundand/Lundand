@@ -209,7 +209,7 @@ roads[#roads].center = { -70, -70 }
 zone("MerchantSquarePlaza", -56, 56, -56, 56, { surface = "Plaza", shape = "Disc", keepClear = false })
 zone("MarketStalls", -38, 38, 26, 40, { locationId = "MarketStalls", keepClear = false, surface = "None" })
 zone("FineryStall", 28, 44, -36, -24, { locationId = "FineryStall", keepClear = false, surface = "None" })
-block("HeartOfRealms", 0, 0, 22, 22, 1, { locationId = "HeartOfRealms", use = "Fountain", height = 18, access = "Public", district = "MerchantSquare" })
+block("HeartOfRealms", 0, 0, 22, 22, 1, { locationId = "HeartOfRealms", use = "Crystal", height = 20, access = "Public", district = "MerchantSquare" })
 
 -- Church on the square's north-west, with its yard and the alley behind it
 block("Church", -120, -128, 46, 72, 3, {
@@ -665,6 +665,7 @@ end
 
 -- Every lot is now a shop, a home for sale or an NPC's house. The busier its street, the likelier a shop: shops line
 -- the square and the main roads, and a few sit in quieter streets too.
+local GUILD_PREFIX = { Market = "MarketGuildHouse", Residential = "TownGuildHouse", Royal = "TownGuildHouse", Craft = "CraftGuildHouse", Harbor = "HarborGuildHouse", Slum = "SlumGuildHouse" }
 local SHOP_PREFIX = { Market = "MarketShop", Residential = "TownShop", Royal = "TownShop", Craft = "CraftShop", Harbor = "HarborShop", Slum = "SlumShop" }
 for _, entry in ipairs(blocks) do
 	local step = if entry.door ~= nil then LayoutRules.doorStep(entry) else nil
@@ -679,6 +680,13 @@ for _, entry in ipairs(blocks) do
 			entry.shopfront = true
 			entry.access = "Sale"
 			entry.propertyId = nextPropertyId(SHOP_PREFIX[lot.kind])
+		elseif TEMPLATES[entry.template].w >= 22 and chance(0.16) then
+			-- a guild house: a smaller hall a guild can buy, its ground floor a room with the planning table
+			entry.use = "GuildHall"
+			entry.guildHouse = true
+			entry.access = "Guild"
+			entry.open = { [entry.door] = true }
+			entry.propertyId = nextPropertyId(GUILD_PREFIX[lot.kind])
 		elseif chance(lot.sale) then
 			entry.access = "Sale"
 			entry.propertyId = nextPropertyId(PROPERTY_PREFIX[lot.kind])

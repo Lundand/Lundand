@@ -19,7 +19,7 @@ end
 
 local RESIDENTIAL = { Townhouse = true, Shack = true, Mansion = true }
 -- public institutions, essential businesses and story places: never for sale
-local NOT_FOR_SALE = { Church = true, Guild = true, Inn = true, Tavern = true, SlumTavern = true, Keep = true, Library = true, Barracks = true, Chancery = true, Servants = true, Customs = true, FishMarket = true, Office = true, Forge = true, Apothecary = true, CraftGuild = true, Fountain = true, Warehouse = true }
+local NOT_FOR_SALE = { Church = true, Guild = true, Inn = true, Tavern = true, SlumTavern = true, Keep = true, Library = true, Barracks = true, Chancery = true, Servants = true, Customs = true, FishMarket = true, Office = true, Forge = true, Apothecary = true, CraftGuild = true, Crystal = true, Warehouse = true }
 
 return function(t)
 	t.test("the shipped city layout is valid", function()

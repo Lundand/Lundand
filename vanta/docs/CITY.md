@@ -15,7 +15,7 @@ opens to the sea in the east. Each white dot marks a door.
 | rose | Player shop for sale, with its counter on the street |
 | tan | House or building that isn't for sale |
 | orange | Public building you walk into (guild, inns and taverns, forge, apothecary) |
-| gold | Public landmark (church, fountain, customs house, fish market) |
+| gold | Public landmark (church, the Heart of Realms, customs house, fish market) |
 | purple | Castle |
 | teal | Guild hall |
 | dark grey | City and castle walls, towers and gatehouses |
@@ -30,7 +30,7 @@ opens to the sea in the east. Each white dot marks a door.
 | Gates | South gate to the forest, north gate to the mountain road, sea gate into the harbour |
 | Streets | Main roads 12 to 16 studs, side streets 6 to 8, alleys 4 to 5 |
 | Houses | 356, each 16 to 40 studs wide, one to three storeys, built from 15 house models (68 of them are shops) |
-| For sale | 194 homes, 74 shops and 10 guild halls: 278 property IDs |
+| For sale | 172 homes, 74 shops and 42 guild halls and guild houses: 288 property IDs |
 | Public buildings you walk into | 17 (10 of them guild halls), plus the church, the keep, the Royal Library and the fish market |
 | Parts | About 14,000, of which 104 cast light |
 
@@ -62,7 +62,7 @@ room far above the map. Only the few public buildings have a real ground floor y
 
 ## Districts
 
-- **Merchant Square**: a paved disc 112 studs across with the fountain and the Heart of Realms at its centre. A
+- **Merchant Square**: a paved disc 112 studs across with the Heart of Realms at its centre: the crystal the whole story turns on, floating over a stepped dais ringed by obelisks. A
   ring of three-storey houses and shops surrounds it, with the Adventurers' Guild and the Square Inn facing it.
   Market streets lined with shops run east and south of it.
 - **Church**: north-west of the square, reached by a lane from the plaza. It has a nave with pews facing the altar,
@@ -100,8 +100,9 @@ decoration. Everything else is bought and sold in player shops.
 
 ## Guild halls
 
-Ten guild halls stand around town: three in the craftsman quarter, two by the square, three in Old Town, one at the
-harbour and one in the slums. A guild's leader buys one from the guild treasury once the guild reaches level 5, and
+42 guild buildings stand around town, fewer than the shops. Ten are big guild halls: three in the craftsman quarter,
+two by the square, three in Old Town, one at the harbour and one in the slums. The other 32 are guild houses, smaller
+halls on ordinary streets (cheaper, from 80,000 gold before location). A guild's leader buys one from the guild treasury once the guild reaches level 5, and
 each guild may have one. A hall's ground floor is a room you walk into, with the guild's planning table in it.
 
 ## What things cost

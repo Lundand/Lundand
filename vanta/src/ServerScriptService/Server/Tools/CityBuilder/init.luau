@@ -33,7 +33,7 @@ local rgb = Kit.rgb
 export type Options = { yield: boolean?, parent: Instance? }
 
 local LANDMARKS: {[string]: (any, Instance) -> Model} = {
-	Fountain = Landmarks.fountain,
+	Crystal = Landmarks.heartOfRealms,
 	Church = Landmarks.church,
 	Keep = Landmarks.keep,
 	Library = Landmarks.library,
@@ -420,7 +420,7 @@ function CityBuilder.build(options: Options?): Model
 			if PUBLIC[entry.use] then
 				-- a public building: a real ground-floor room behind an open doorway
 				model = Kit.model(folder, entry.id)
-				Kit.lightBudget = 1
+				Kit.lightBudget = if entry.guildHouse then 0 else 1
 				Shell.build(model, cf, { W = W, D = D, stories = entry.stories, roof = if W <= 24 then "Gable" else "Eaves", style = entry.style or "Residential", hollow = true, trapdoor = entry.trapdoor, floorHeight = Layout.floorHeight })
 				Kit.lightBudget = math.huge
 				local innId = innByLocation[entry.locationId]
@@ -496,7 +496,7 @@ function CityBuilder.build(options: Options?): Model
 		Hideout.build(Layout, root, tavern)
 	end
 
-	-- location anchors: one invisible part per located building or yard (the fountain's crystal is its own)
+	-- location anchors: one invisible part per located building or yard (the Heart of Realms carries its own)
 	for _, entry in ipairs(Layout.blocks) do
 		if entry.locationId ~= nil and entry.locationId ~= "HeartOfRealms" then
 			local part = anchor(places, entry.locationId, Vector3.new(entry.size[1] - 2, 10, entry.size[2] - 2), CFrame.new(entry.center[1], 5.6, entry.center[2]) * CFrame.Angles(0, math.rad(entry.yaw or 0), 0), rgb(220, 190, 70))
