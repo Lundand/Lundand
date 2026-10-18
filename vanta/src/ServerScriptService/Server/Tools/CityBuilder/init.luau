@@ -43,7 +43,9 @@ local LANDMARKS: {[string]: (any, Instance) -> Model} = {
 }
 
 -- Public buildings you walk into; every other building is a closed shell with an instanced interior.
-local PUBLIC = { Inn = true, Guild = true, Forge = true, Apothecary = true, CraftGuild = true, GuildHall = true, SlumTavern = true, Tavern = true }
+local PUBLIC = { Inn = true, Guild = true, Forge = true, Apothecary = true, CraftGuild = true, SlumTavern = true, Tavern = true }
+-- what a closed building's room has in it besides its walls (Interior.build)
+local FITTINGS = { Storefront = "Shop", GuildHall = "GuildHall" }
 CityBuilder.PUBLIC = PUBLIC
 
 local function folderIn(parent: Instance, name: string): Folder
@@ -61,13 +63,16 @@ local function assetFolder(name: string): Folder
 	return folderIn(folderIn(ServerStorage, "CityAssets"), name)
 end
 
--- The interior a building's door leads to: its house model's room, or a room sized to the building.
+-- The interior a building's door leads to: its house model's room, or a room sized to the building; shops and guild
+-- halls have their own (with a counter, or a planning table).
 function CityBuilder.interiorKey(entry: any): string
+	local fitting = FITTINGS[entry.use]
+	local prefix = if fitting ~= nil then fitting .. "_" else ""
 	if entry.template ~= nil then
-		return entry.template
+		return prefix .. entry.template
 	end
 	local _, W, D = Shell.frameOf(entry)
-	return string.format("Room%dx%d", math.floor(W), math.floor(D))
+	return string.format("%sRoom%dx%d", prefix, math.floor(W), math.floor(D))
 end
 
 local partCounts: {[Instance]: number} = {}
@@ -102,10 +107,10 @@ local function houseModel(templateId: string): Model
 	return model
 end
 
-local function ensureInterior(key: string, width: number, depth: number, style: string?)
+local function ensureInterior(key: string, width: number, depth: number, style: string?, fitting: string?)
 	local folder = assetFolder("Interiors")
 	if folder:FindFirstChild(key) == nil then
-		local room = Interior.build(key, width, depth, style)
+		local room = Interior.build(key, width, depth, style, fitting)
 		room.WorldPivot = CFrame.new()
 		room.Parent = folder
 	end
@@ -249,7 +254,7 @@ local function sinkRoof(model: Model, level: number?)
 end
 
 -- What a closed building's door is called on its prompt.
-local DOOR_NAMES = { Storefront = "Shop", Warehouse = "Warehouse" }
+local DOOR_NAMES = { Storefront = "Shop", Warehouse = "Warehouse", GuildHall = "Guild hall" }
 
 local BACK_OF = { South = "North", North = "South", East = "West", West = "East" }
 
@@ -420,7 +425,7 @@ function CityBuilder.build(options: Options?): Model
 			if PUBLIC[entry.use] then
 				-- a public building: a real ground-floor room behind an open doorway
 				model = Kit.model(folder, entry.id)
-				Kit.lightBudget = if entry.guildHouse then 0 else 1
+				Kit.lightBudget = 1
 				Shell.build(model, cf, { W = W, D = D, stories = entry.stories, roof = if W <= 24 then "Gable" else "Eaves", style = entry.style or "Residential", hollow = true, trapdoor = entry.trapdoor, floorHeight = Layout.floorHeight })
 				Kit.lightBudget = math.huge
 				local innId = innByLocation[entry.locationId]
@@ -452,7 +457,7 @@ function CityBuilder.build(options: Options?): Model
 				Shell.paint(model, entry.style or "Residential", entry.seed or 1)
 				closeWindows(model, cf, entry, blocked)
 				local key = CityBuilder.interiorKey(entry)
-				ensureInterior(key, W - 2, D - 2, entry.style)
+				ensureInterior(key, W - 2, D - 2, entry.style, FITTINGS[entry.use])
 				local door = model:FindFirstChild("Door", true)
 				if door ~= nil and door:IsA("BasePart") then
 					door:SetAttribute("HouseId", entry.id)
@@ -471,10 +476,10 @@ function CityBuilder.build(options: Options?): Model
 				end
 			end
 			if entry.shopfront and entry.propertyId ~= nil then
-				-- a player shop: its counter on the street, where people buy and the owner keeps shop
-				local counter = Shell.shopfront(model, cf, W, D, entry.style or "Residential", 5, entry.seed or 1)
-				counter:SetAttribute("ShopId", entry.propertyId)
-				counter:AddTag("ShopCounter")
+				-- a player shop: an awning and a hanging sign on the street; its counter is inside
+				local sign = Shell.shopfront(model, cf, W, D, entry.style or "Residential", 5, entry.seed or 1)
+				sign:SetAttribute("ShopId", entry.propertyId)
+				sign:AddTag("ShopSign")
 			end
 			sinkRoof(model, roofLevel[entry.id])
 			model:SetAttribute("Access", entry.access or "Npc")
@@ -536,14 +541,6 @@ function CityBuilder.build(options: Options?): Model
 			local chest = Kit.part(markerFolder, entry.id, Vector3.new(4, 3, 2.5), CFrame.new(entry.at[1], 2.1, entry.at[2]), rgb(120, 82, 46), Enum.Material.WoodPlanks)
 			Kit.part(markerFolder, "ChestBand", Vector3.new(4.1, 0.4, 2.6), CFrame.new(entry.at[1], 2.9, entry.at[2]), Kit.colors.iron, Enum.Material.Metal, { collide = false, query = false })
 			chest:AddTag("StarterChest")
-		end
-	end
-	-- guild halls: a planning table in each hall's main room (L-54)
-	for _, entry in ipairs(Layout.blocks) do
-		if entry.use == "GuildHall" then
-			local planning = Kit.part(markerFolder, entry.id .. "Table", Vector3.new(8, 3, 4), CFrame.new(entry.center[1], 2.1, entry.center[2]), rgb(120, 86, 56), Enum.Material.WoodPlanks)
-			planning:SetAttribute("PropertyId", entry.propertyId)
-			planning:AddTag("PlanningTable")
 		end
 	end
 

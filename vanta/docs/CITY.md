@@ -91,11 +91,10 @@ decoration. Everything else is bought and sold in player shops.
   in Old Town, the craftsman quarter and the slums. Every street spot has a foot-traffic score, from 0 for a quiet
   back lane far from the square to 1 for a main road by the square. The busier the spot, the likelier a house there is
   a shop. A shop needs 7 studs of clear street in front of it for its counter; `LayoutRules` checks this.
-- **The counter.** Each shop has a counter on the street beside its door, under an awning, with a hanging sign. At an
-  owned shop the counter opens the shop window (`ShopService`): customers buy listings and sell into buy orders, and
-  the owner lists goods and collects earnings. At a shop for sale it opens the deed, to buy it. The counter's prompt and
-  the sign show the owner's name.
-- **The door.** A shop's door leads to its own room, like a house's: the owner's back room, empty for now.
+- **Inside the shop.** A shop shows on the street with an awning and a hanging sign carrying its owner's name. Its
+  door leads to the shop's instanced room, open to every customer, with the counter across the back. At an owned
+  shop the counter opens the shop window (`ShopService`): customers buy listings and sell into buy orders, and the
+  owner lists goods and collects earnings. At a shop for sale it opens the deed, to buy it.
 - **One each.** A player may own one shop and one home.
 
 ## Guild halls
@@ -103,7 +102,7 @@ decoration. Everything else is bought and sold in player shops.
 42 guild buildings stand around town, fewer than the shops. Ten are big guild halls: three in the craftsman quarter,
 two by the square, three in Old Town, one at the harbour and one in the slums. The other 32 are guild houses, smaller
 halls on ordinary streets (cheaper, from 80,000 gold before location). A guild's leader buys one from the guild treasury once the guild reaches level 5, and
-each guild may have one. A hall's ground floor is a room you walk into, with the guild's planning table in it.
+each guild may have one. Like a house, a hall is a closed building whose door leads to an instanced room with the guild's planning table. Anyone may look round a hall nobody owns; once a guild owns it, only its members get in.
 
 ## What things cost
 

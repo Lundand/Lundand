@@ -1,7 +1,8 @@
 --!strict
--- Player shops (L-53 to L-55). Every shop has a counter on the street (a part tagged ShopCounter): at an owned shop
--- it opens the shop's window, at one for sale the deed (the property window, to buy it). The counter's prompt and the
--- shop's hanging sign carry the owner's name. Owners list goods, post buy orders with the gold set aside, take goods
+-- Player shops (L-53 to L-55). Every shop has a counter inside, in its instanced room (a part tagged ShopCounter,
+-- named for its shop by InteriorService): at an owned shop it opens the shop's window, at one for sale the deed (the
+-- property window, to buy it). The counter's prompt and the shop's hanging sign on the street (tagged ShopSign) carry
+-- the owner's name. Owners list goods, post buy orders with the gold set aside, take goods
 -- back, cancel orders and collect earnings; visitors buy listings and sell into buy orders. Each action sets aside
 -- items or gold in the player's save and goes through the outbox to the shop's shared record; the shop's answer
 -- settles back into the save.
@@ -27,6 +28,8 @@ local services: any = nil
 local sessions: {[Player]: any} = {}
 local limiter = RateLimiter.new(4, 1, os.clock)
 local counters: {[string]: {BasePart}} = {}
+local signs: {[string]: BasePart} = {}
+local owners: {[string]: string | false} = {} -- last known owner's name per shop (false: for sale)
 local toLabel: {string} = {} -- shops whose owner's name is still to be put on their counter
 
 function ShopService.init(allServices: any)
@@ -96,20 +99,20 @@ end
 
 -- What a shop's counter and sign say: whose shop it is, or that it is for sale.
 local function label(shopId: string, ownerName: string?)
+	owners[shopId] = ownerName or false
 	for _, counter in ipairs(counters[shopId] or {}) do
 		local prompt = counter:FindFirstChild("CounterPrompt")
 		if prompt ~= nil and prompt:IsA("ProximityPrompt") then
 			prompt.ObjectText = if ownerName ~= nil then ownerName .. "'s shop" else "Shop for sale"
 			prompt.ActionText = if ownerName ~= nil then "Shop" else "See the deed"
 		end
-		local model = counter.Parent
-		local sign = model and model:FindFirstChild("ShopSign")
-		if sign ~= nil then
-			for _, gui in ipairs(sign:GetChildren()) do
-				local text = gui:FindFirstChildOfClass("TextLabel")
-				if text ~= nil then
-					text.Text = if ownerName ~= nil then ownerName else "Shop"
-				end
+	end
+	local sign = signs[shopId]
+	if sign ~= nil then
+		for _, gui in ipairs(sign:GetChildren()) do
+			local text = gui:FindFirstChildOfClass("TextLabel")
+			if text ~= nil then
+				text.Text = if ownerName ~= nil then ownerName else "Shop"
 			end
 		end
 	end
@@ -179,11 +182,16 @@ local function setupCounter(instance: Instance)
 	end
 	local counter = instance :: BasePart
 	local id = shopId :: string
-	if counters[id] == nil then
-		counters[id] = {}
-		table.insert(toLabel, id)
-	end
+	counters[id] = counters[id] or {}
 	table.insert(counters[id], counter)
+	-- the room is taken down when nobody is in it: forget its counter then
+	counter.Destroying:Connect(function()
+		local list = counters[id]
+		local index = list and table.find(list, counter)
+		if index ~= nil then
+			table.remove(list, index)
+		end
+	end)
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.Name = "CounterPrompt"
 	prompt.ActionText = "Shop"
@@ -195,6 +203,21 @@ local function setupCounter(instance: Instance)
 	prompt.Triggered:Connect(function(player: Player)
 		useCounter(player, id, counter)
 	end)
+	local known = owners[id]
+	if known ~= nil then
+		label(id, if known then known else nil)
+	else
+		table.insert(toLabel, id)
+	end
+end
+
+local function setupSign(instance: Instance)
+	local shopId = instance:GetAttribute("ShopId")
+	if not instance:IsA("BasePart") or type(shopId) ~= "string" or Content.world.properties[shopId] == nil then
+		return
+	end
+	signs[shopId] = instance :: BasePart
+	table.insert(toLabel, shopId)
 end
 
 -- The outbox handler: applies the operation to the shop once and returns what the player's save receives.
@@ -254,6 +277,10 @@ function ShopService.start()
 		setupCounter(counter)
 	end
 	CollectionService:GetInstanceAddedSignal("ShopCounter"):Connect(setupCounter)
+	for _, sign in ipairs(CollectionService:GetTagged("ShopSign")) do
+		setupSign(sign)
+	end
+	CollectionService:GetInstanceAddedSignal("ShopSign"):Connect(setupSign)
 	-- name every shop's owner on its counter, one every couple of seconds so the deed store isn't flooded at start
 	task.spawn(function()
 		while true do

@@ -202,9 +202,9 @@ function Shell.build(model: Model, cf: CFrame, spec: Spec): BasePart?
 	return door
 end
 
--- A shop's front on the street (L-53): a counter beside the door where customers buy and the owner keeps shop, an
--- awning over it above the ground-floor windows, and a hanging sign. Built in the building's frame (door in the front
--- wall at +z). Returns the counter; ShopService gives it its prompt.
+-- A shop's front on the street (L-53): an awning above the ground-floor windows beside the door and a hanging sign,
+-- so a shop shows from along the street; its counter is inside (Interior.build). Built in the building's frame (door
+-- in the front wall at +z). Returns the sign; ShopService writes the owner's name on it.
 function Shell.shopfront(model: Model, cf: CFrame, W: number, D: number, style: string, doorWidth: number, seed: number): BasePart
 	local f = Kit.frame(model, cf)
 	local doorX = Shell.doorX(W)
@@ -213,18 +213,16 @@ function Shell.shopfront(model: Model, cf: CFrame, W: number, D: number, style: 
 	local x0, x1 = doorX + doorWidth / 2 + 1.5, W / 2 - 1
 	local width = math.min(9, x1 - x0)
 	local cx = (x0 + x1) / 2
-	local counter = f:box("ShopCounter", Vector3.new(width, 3.2, 1.6), cx, 1.6, D / 2 + 0.8, C.wood, M.WoodPlanks)
-	f:box("CounterTop", Vector3.new(width + 0.3, 0.2, 1.9), cx, 3.3, D / 2 + 0.95, C.lightWood, M.Wood, NO)
 	local cloth = C.cloth[seed % #C.cloth + 1]
 	-- the awning slopes down from the wall towards the street
 	f:wedgeAt("Awning", Vector3.new(width + 1, 1.2, 2.4), CFrame.new(cx, head + 0.8, D / 2 + 1.2) * CFrame.Angles(0, math.pi, 0), cloth, M.Fabric, NO)
-	-- a sign hanging from a bracket at the counter's far end, readable from both ways along the street
+	-- a sign hanging from a bracket at the awning's far end, readable from both ways along the street
 	local signX = cx + width / 2 - 0.3
 	f:box("SignBracket", Vector3.new(0.3, 0.3, 3), signX, head + 3.55, D / 2 + 1.5, C.iron, M.Metal, NO)
 	local board = f:box("ShopSign", Vector3.new(0.2, 1.6, 2.4), signX, head + 2.75, D / 2 + 1.6, C.darkWood, M.WoodPlanks, NO)
 	Kit.sign(board, Enum.NormalId.Left, "Shop", rgb(240, 226, 190))
 	Kit.sign(board, Enum.NormalId.Right, "Shop", rgb(240, 226, 190))
-	return counter
+	return board
 end
 
 -- Repaints a building from its district palette: every part keeps its role ("Base", "Upper", "Roof"...), and the

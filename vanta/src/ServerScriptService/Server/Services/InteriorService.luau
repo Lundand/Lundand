@@ -3,7 +3,7 @@
 -- built far above the map from ServerStorage.CityAssets.Interiors only while someone is in it; everyone in the same
 -- house shares one room. An inn room (RentalService) is one room per renter. The room's ExitDoor brings you back out.
 -- Ownership decides who gets in: an unowned house can be looked round by anyone, an owned one only by those its owner
--- allows. That is checked at the door, again for everyone inside whenever the owner changes who may enter or the
+-- allows; a shop lets in every customer, and a guild's hall the guild's members. That is checked at the door, again for everyone inside whenever the owner changes who may enter or the
 -- house is bought, and every few seconds besides (deeds also change on other servers). A room nobody is in is
 -- removed after a while.
 local CollectionService = game:GetService("CollectionService")
@@ -16,6 +16,7 @@ local PropertyAccess = require(Server.Domain.PropertyAccess)
 local Remotes = require(Server.Net.Remotes)
 local RateLimiter = require(Server.Net.RateLimiter)
 local Layout = require(ServerStorage:WaitForChild("ServerData").CityLayout)
+local Content = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared").Content)
 
 local InteriorService = {}
 local services: any = nil
@@ -183,6 +184,13 @@ local function open(key: string, templateKey: string, exit: CFrame, propertyId: 
 	model:PivotTo(CFrame.new(x, y, z))
 	-- measure where the room really is: a model saved with a PrimaryPart pivots on that part, not on its floor
 	local center, size = model:GetBoundingBox()
+	-- a shop's counter and a hall's planning table belong to this building (ShopService and GuildService wire them up
+	-- as the room appears)
+	for _, part in ipairs(model:GetDescendants()) do
+		if part.Name == "ShopCounter" or part.Name == "PlanningTable" then
+			part:SetAttribute(if part.Name == "ShopCounter" then "ShopId" else "PropertyId", propertyId)
+		end
+	end
 	local exitDoor = model:FindFirstChild("ExitDoor", true)
 	if exitDoor ~= nil and exitDoor:IsA("BasePart") then
 		local prompt = Instance.new("ProximityPrompt")
@@ -251,12 +259,26 @@ end
 -- May this player be in this property? At the door, an unreadable deed or an unanswered friendship keeps the door
 -- shut; for someone already inside, not knowing never turns them out.
 local function allowed(player: Player, propertyId: string, atDoor: boolean): (boolean, string?)
+	local kind = Content.world.properties[propertyId] and Content.world.properties[propertyId].kind
+	if kind == "Shop" then
+		-- a shop is open to every customer
+		return true, nil
+	end
 	local readable, record = properties():read(propertyId)
 	if not readable then
 		return not atDoor, "The door won't open right now. Try again shortly."
 	end
 	if record == nil or record.owner == nil then
 		return true, nil
+	end
+	if kind == "GuildHall" then
+		-- a guild's hall: its members only
+		local data = services.PlayerDataService.getData(player)
+		local guildId = data and data.account.guild.id
+		if guildId ~= nil and guildId == record.owner.guildId then
+			return true, nil
+		end
+		return false, "That hall belongs to " .. tostring(record.owner.name) .. ". Only its members may enter."
 	end
 	local isFriend: boolean? = false
 	if record.permissions ~= nil and record.permissions.mode == "Friends" and record.owner.userId ~= player.UserId then
