@@ -28,7 +28,7 @@ opens to the sea in the east. Each white dot marks a door.
 | --- | --- |
 | Walls | 960 x 840 studs, 30 high, with 25 towers (16 studs square) about every 120 studs |
 | Gates | South gate to the forest, north gate to the mountain road, sea gate into the harbour |
-| Streets | Main roads 12 to 16 studs, side streets 6 to 8, alleys 4 to 5 |
+| Streets | Main roads 12 to 16 studs; each district has a few straight streets 10 to 12 wide (7 in the slums); eight small squares where streets cross |
 | Houses | 356, each 16 to 40 studs wide, one to three storeys, built from 15 house models (68 of them are shops) |
 | For sale | 172 homes, 74 shops and 42 guild halls and guild houses: 288 property IDs |
 | Public buildings you walk into | 17 (10 of them guild halls), plus the church, the keep, the Royal Library and the fish market |
@@ -78,8 +78,16 @@ room far above the map. Only the few public buildings have a real ground floor y
   Guild, three guild halls, and craftsmen's houses and shops.
 - **Harbour**: east. A quay with cranes and cargo, six piers, five ships, warehouses, the customs house, the fish
   market, the Salt and Anchor tavern and the cargo office.
-- **Slums**: south-west, against the wall. Small, low, weathered houses on narrow alleys, with laundry lines and a
-  well. The Crooked Lantern tavern hides the way down to the hideout.
+- **Slums**: south-west, against the wall. Small, low houses with boarded windows and patched walls, ruins fallen
+  in, muddy streets with puddles and junk, laundry lines and a well. The Crooked Lantern tavern hides the way down to the hideout.
+
+## Streets
+
+Only the streets are paved: cobbles on the main roads, flagstones on the district streets, mud in the slums. Between
+them the ground is trodden earth. Each district has a few straight streets rather than a maze of lanes, and where they
+cross there are small squares with a well or a tree, benches and a signpost pointing to the nearest places (the
+square, the castle, the harbour, the gates, the slums). Lanterns light the main roads and the streets, and houses
+have barrels, crates, benches or planters by their walls.
 
 ## Shops
 

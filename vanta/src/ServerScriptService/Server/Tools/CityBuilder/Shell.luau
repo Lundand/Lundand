@@ -225,6 +225,99 @@ function Shell.shopfront(model: Model, cf: CFrame, W: number, D: number, style: 
 	return board
 end
 
+-- A repeatable "random" number in [0, 1) from a building's seed and a salt, so a rebuild looks the same.
+local function roll(seed: number, salt: number): number
+	return ((seed * 9301 + salt * 49297 + 233) % 233280) / 233280
+end
+
+-- Wear for a slum house: boards nailed across many of its windows and planks patched over holes in the walls.
+function Shell.weather(model: Model, cf: CFrame, W: number, D: number, seed: number)
+	local f = Kit.frame(model, cf)
+	local boards = rgb(104, 82, 58)
+	for index, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") and part.Name == "Window" and roll(seed, index) < 0.55 then
+			local p = cf:PointToObjectSpace(part.CFrame.Position)
+			local out = if p.Z > 0 then 1 else -1
+			for k, tilt in ipairs({ 18, -14 }) do
+				f:boxAt("Boards", Vector3.new(part.Size.X + 0.6, 0.35, 0.12), CFrame.new(p.X, p.Y + (k - 1.5) * 0.9, p.Z + out * (0.21 + k * 0.03)) * CFrame.Angles(0, 0, math.rad(tilt)), boards, M.WoodPlanks, NO)
+			end
+		end
+	end
+	-- patches low on the front wall, clear of the door
+	local doorX = Shell.doorX(W)
+	for k = 1, 2 do
+		local x = -W / 2 + 2 + roll(seed, 40 + k) * (W - 4)
+		if math.abs(x - doorX) > 4.5 then
+			f:boxAt("Patch", Vector3.new(2.2, 1.1, 0.1), CFrame.new(x, 1.4 + roll(seed, 50 + k) * 1.4, D / 2 + 0.05 + k * 0.02) * CFrame.Angles(0, 0, math.rad((roll(seed, 60 + k) - 0.5) * 16)), rgb(120, 96, 66), M.WoodPlanks, NO)
+		end
+	end
+end
+
+-- A ruin: a house fallen in. Broken walls of uneven height, no roof, rubble and a fallen beam inside.
+function Shell.ruin(model: Model, cf: CFrame, W: number, D: number, style: string, seed: number)
+	local f = Kit.frame(model, cf)
+	local palette = Kit.palettes[style] or Kit.palettes.Residential
+	local stone, dark = palette.base[1], rgb(96, 88, 76)
+	f:box("Plinth", Vector3.new(W, 0.6, D), 0, 0.3, 0, dark, palette.baseMaterial)
+	-- the back wall in three pieces of different heights
+	for k = 0, 2 do
+		local h = 3 + roll(seed, k) * 6
+		f:box("RuinWall", Vector3.new(W / 3, h, 1), -W / 3 + k * W / 3, 0.6 + h / 2, -D / 2 + 0.5, stone, palette.baseMaterial)
+	end
+	-- side walls, high at the back, broken off towards the street
+	for _, s in ipairs({ -1, 1 }) do
+		local back = 4 + roll(seed, 10 + s) * 4
+		local front = 1 + roll(seed, 20 + s) * 2
+		-- (from the back wall's inner face, so no face lies in the back wall's)
+		f:box("RuinWall", Vector3.new(1, back, D / 2 - 1.5), s * (W / 2 - 0.5), 0.6 + back / 2, -D / 4 + 0.25, stone, palette.baseMaterial)
+		f:box("RuinWall", Vector3.new(1, front, D / 2), s * (W / 2 - 0.5), 0.6 + front / 2, D / 4, stone, palette.baseMaterial)
+		-- a stub of the front wall at the corner
+		local stub = 1.5 + roll(seed, 30 + s) * 2
+		f:box("RuinWall", Vector3.new(3, stub, 1), s * (W / 2 - 2.5), 0.6 + stub / 2, D / 2 - 0.5, stone, palette.baseMaterial)
+	end
+	-- rubble and a beam that came down with the roof
+	for k = 1, 5 do
+		local size = 1 + roll(seed, 70 + k) * 1.6
+		local x = (roll(seed, 80 + k) - 0.5) * (W - 6)
+		local z = (roll(seed, 90 + k) - 0.5) * (D - 6)
+		f:boxAt("Rubble", Vector3.new(size, size * 0.7, size), CFrame.new(x, 0.6 + size * 0.3, z) * CFrame.Angles(roll(seed, 100 + k), roll(seed, 110 + k) * 3, 0), dark, M.Cobblestone)
+	end
+	f:boxAt("FallenBeam", Vector3.new(0.7, 0.7, D * 0.7), CFrame.new(0, 2.2, -D / 6) * CFrame.Angles(math.rad(14), math.rad(20), 0), rgb(70, 54, 38), M.Wood)
+end
+
+-- Life outside a house: by the wall on the side away from the door, a pair of barrels, a stack of crates, a bench or
+-- a planter (in the slums, junk or a puddle). Some houses have nothing.
+function Shell.frontDressing(model: Model, cf: CFrame, W: number, D: number, style: string, seed: number)
+	local f = Kit.frame(model, cf)
+	-- (off the round numbers the streets' edges lie on)
+	local x = W / 2 - 1.963
+	local pick = math.floor(roll(seed, 200) * 5)
+	if style == "Slum" then
+		if pick == 0 or pick == 1 then
+			f:boxAt("Junk", Vector3.new(2.6, 0.3, 0.6), CFrame.new(x, 0.5, D / 2 + 1) * CFrame.Angles(0, 0.4, math.rad(20)), rgb(100, 80, 56), M.WoodPlanks)
+			f:cyl("BrokenBarrel", 1.8, 2.2, x - 1.6, 0, D / 2 + 1.4, rgb(96, 70, 46), M.Wood)
+		elseif pick == 2 then
+			local puddle = f:box("Puddle", Vector3.new(3, 0.05, 2), x - 1, 0.21, D / 2 + 2.5, rgb(50, 56, 60), M.Glass, NO)
+			puddle.Transparency = 0.3
+		elseif pick == 3 then
+			f:box("Crate", Vector3.new(2.2, 2.2, 2.2), x, 1.1, D / 2 + 1.3, rgb(120, 92, 60), M.WoodPlanks)
+		end
+		return
+	end
+	if pick == 0 then
+		f:cyl("Barrel", 3.2, 2.4, x, 0, D / 2 + 1.4, rgb(116, 82, 52), M.Wood)
+		f:cyl("Barrel", 2.8, 2.2, x - 2.5, 0, D / 2 + 1.3, rgb(108, 78, 50), M.Wood)
+	elseif pick == 1 then
+		f:box("Crate", Vector3.new(2.6, 2.6, 2.6), x, 1.3, D / 2 + 1.437, rgb(150, 112, 70), M.WoodPlanks)
+		f:box("Crate", Vector3.new(1.8, 1.8, 1.8), x + 0.2, 3.5, D / 2 + 1.437, rgb(140, 104, 66), M.WoodPlanks)
+	elseif pick == 2 then
+		f:box("Bench", Vector3.new(4, 1.7, 1.3), x - 1, 0.85, D / 2 + 0.75, C.wood, M.WoodPlanks)
+	elseif pick == 3 then
+		f:box("Planter", Vector3.new(4, 1.2, 1.2), x - 1, 0.6, D / 2 + 0.7, rgb(110, 80, 52), M.WoodPlanks)
+		f:box("Flowers", Vector3.new(3.6, 0.6, 0.8), x - 1, 1.5, D / 2 + 0.7, C.cloth[seed % #C.cloth + 1], M.Grass, NO)
+	end
+end
+
 -- Repaints a building from its district palette: every part keeps its role ("Base", "Upper", "Roof"...), and the
 -- house's own seed picks the shades, so neighbours built from the same model still look different.
 function Shell.paint(model: Model, style: string, seed: number)

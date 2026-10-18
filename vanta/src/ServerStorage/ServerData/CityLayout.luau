@@ -329,19 +329,27 @@ block("CastleGatehouse", 0, -334, 28, 16, 2, { kind = "Gatehouse", use = "Gateho
 block("CityForge", 270, -228, 34, 30, 2, { locationId = "CityForge", door = "East", use = "Forge", style = "Craft", access = "Public", district = "CraftsmanQuarter", open = { East = true, North = true }, name = "City Forge" })
 block("CityApothecary", 326, -228, 26, 28, 2, { locationId = "CityApothecary", door = "West", use = "Apothecary", style = "Craft", access = "Public", district = "CraftsmanQuarter", open = { West = true }, name = "City Apothecary" })
 block("CraftsmensGuild", 330, -296, 36, 34, 3, { locationId = "CraftsmensGuild", door = "West", use = "CraftGuild", style = "Craft", access = "Public", district = "CraftsmanQuarter", open = { West = true, South = true }, name = "Craftsmen's Guild" })
+-- Small squares where the main streets cross: open ground with a well or a tree and a signpost, so the town has
+-- places to meet and landmarks to find your way by.
+local SQUARES = { { -270, 0 }, { -270, -88 }, { 160, 0 }, { 0, 225 }, { 300, -440 }, { -300, 230 }, { -66, -250 }, { 160, 75 } }
+for index, at in ipairs(SQUARES) do
+	local half = if at[1] == -300 then 13 else 15
+	zone(string.format("Square%02d", index), at[1] - half, at[1] + half, at[2] - half, at[2] + half, { surface = "Square", district = if at[1] == -300 then "Slums" else nil })
+end
+
 -- Guild halls (L-54): bought by player guilds, each with a planning table inside. Three in the craftsman quarter and
 -- one or two in every other part of town, on a street; Config/World lists the same districts in the same order.
 local GUILD_HALLS = {
 	{ x = 268, z = -300, door = "East", style = "Craft", district = "CraftsmanQuarter" },
 	{ x = 268, z = -360, door = "East", style = "Craft", district = "CraftsmanQuarter" },
 	{ x = 332, z = -360, door = "West", style = "Craft", district = "CraftsmanQuarter" },
-	{ x = 173, z = -67, door = "North", style = "Market", district = "MerchantSquare" },
-	{ x = -252, z = -67, door = "North", style = "Residential", district = "Residential" },
+	{ x = 184, z = -65, door = "North", style = "Market", district = "MerchantSquare" },
+	{ x = -246, z = -67, door = "North", style = "Residential", district = "Residential" },
 	{ x = 129, z = 169, door = "North", style = "Residential", district = "Residential" },
-	{ x = 300, z = -100, door = "East", style = "Harbor", district = "Harbor" },
+	{ x = 300, z = -112, door = "East", style = "Harbor", district = "Harbor" },
 	{ x = -278, z = 169, door = "North", style = "Slum", district = "Slums" },
-	{ x = -26, z = -250, door = "East", style = "Residential", district = "Residential" },
-	{ x = 65, z = 127, door = "South", style = "Market", district = "MerchantSquare" },
+	{ x = -26, z = -285, door = "East", style = "Residential", district = "Residential" },
+	{ x = 67, z = 127, door = "South", style = "Market", district = "MerchantSquare" },
 }
 for index, spot in ipairs(GUILD_HALLS) do
 	local id = string.format("GuildHall%02d", index)
@@ -549,7 +557,20 @@ local function streetBlock(kind: string, x0: number, x1: number, z0: number, z1:
 	end
 end
 
--- grid(kind, x0, x1, z0, z1, xCuts, zCuts): cuts are street centre lines { position, width }
+-- grid(kind, x0, x1, z0, z1, xCuts, zCuts): cuts are street centre lines { position, width }. Each cut is a street
+-- (a road, paved, with lanterns), so a district has a few wide, straight streets rather than a maze of lanes.
+-- (gridStreets lays every district's streets first, so no district's houses stand in another's street)
+local streetCount = 0
+local function gridStreets(kind: string, x0: number, x1: number, z0: number, z1: number, xCuts: {{number}}, zCuts: {{number}})
+	for _, cut in ipairs(xCuts) do
+		streetCount += 1
+		road(string.format("%sStreet%02d", kind, streetCount), cut[1] - cut[2] / 2, cut[1] + cut[2] / 2, z0, z1, { width = "Street", district = kind })
+	end
+	for _, cut in ipairs(zCuts) do
+		streetCount += 1
+		road(string.format("%sStreet%02d", kind, streetCount), x0, x1, cut[1] - cut[2] / 2, cut[1] + cut[2] / 2, { width = "Street", district = kind })
+	end
+end
 local function grid(kind: string, x0: number, x1: number, z0: number, z1: number, xCuts: {{number}}, zCuts: {{number}})
 	local xs = { { x0, x0 } }
 	for _, cut in ipairs(xCuts) do
@@ -609,22 +630,34 @@ do
 end
 
 -- West residential (between the ring street and the west wall, north and south of the west road)
-grid("Residential", -460, -92, -170, -6, { { -150, 7 }, { -214, 5 }, { -280, 7 }, { -350, 5 }, { -410, 6 } }, { { -126, 6 }, { -88, 8 }, { -44, 5 } })
-grid("Residential", -460, -92, 6, 144, { { -134, 6 }, { -196, 5 }, { -262, 7 }, { -330, 5 }, { -398, 6 } }, { { 46, 6 }, { 88, 8 } })
+-- the district streets, then the houses between them
+gridStreets("Residential", -460, -92, -170, -6, { { -150, 10 }, { -270, 10 }, { -380, 10 } }, { { -88, 8 } })
+gridStreets("Residential", -460, -92, 6, 144, { { -150, 10 }, { -270, 10 }, { -380, 10 } }, { { 75, 12 } })
+gridStreets("Royal", -124, -8, -318, -92, { { -66, 10 } }, { { -250, 10 } })
+gridStreets("Royal", 8, 124, -318, -92, { { 66, 10 } }, { { -250, 10 }, { -130, 10 } })
+gridStreets("Market", 92, 300, -170, -7, { { 160, 12 }, { 230, 10 } }, { { -88, 12 } })
+gridStreets("Market", 92, 300, 7, 144, { { 160, 12 }, { 230, 10 } }, { { 75, 12 } })
+gridStreets("Market", -92, 92, 92, 144, { { -44, 10 }, { 44, 10 } }, {})
+gridStreets("Craft", 134, 472, -512, -180, { { 200, 10 }, { 384, 10 } }, { { -440, 10 }, { -264, 10 } })
+gridStreets("Residential", -146, 316, 152, 300, { { -60, 10 }, { 50, 10 }, { 160, 10 }, { 250, 10 } }, { { 225, 10 } })
+gridStreets("Harbor", 250, 318, -140, 300, {}, { { -70, 10 }, { 70, 10 }, { 140, 10 }, { 214, 10 } })
+gridStreets("Slum", -460, -152, 152, 300, { { -390, 7 }, { -300, 7 }, { -220, 7 } }, { { 230, 7 } })
+grid("Residential", -460, -92, -170, -6, { { -150, 10 }, { -270, 10 }, { -380, 10 } }, { { -88, 8 } })
+grid("Residential", -460, -92, 6, 144, { { -150, 10 }, { -270, 10 }, { -380, 10 } }, { { 75, 12 } })
 -- North of the square, either side of the castle road (the old royal quarter)
-grid("Royal", -124, -8, -318, -92, { { -66, 6 } }, { { -270, 6 }, { -210, 7 }, { -126, 6 } })
-grid("Royal", 8, 124, -318, -92, { { 66, 6 } }, { { -270, 6 }, { -210, 7 }, { -126, 6 } })
-grid("Market", 92, 300, -170, -7, { { 150, 7 }, { 222, 6 } }, { { -88, 8 } })
-grid("Market", 92, 300, 7, 144, { { 152, 6 }, { 226, 7 } }, { { 88, 8 } })
-grid("Market", -92, 92, 92, 144, { { -44, 6 }, { 44, 6 } }, {})
+grid("Royal", -124, -8, -318, -92, { { -66, 10 } }, { { -250, 10 } })
+grid("Royal", 8, 124, -318, -92, { { 66, 10 } }, { { -250, 10 }, { -130, 10 } })
+grid("Market", 92, 300, -170, -7, { { 160, 12 }, { 230, 10 } }, { { -88, 12 } })
+grid("Market", 92, 300, 7, 144, { { 160, 12 }, { 230, 10 } }, { { 75, 12 } })
+grid("Market", -92, 92, 92, 144, { { -44, 10 }, { 44, 10 } }, {})
 -- Craftsman quarter
-grid("Craft", 134, 472, -512, -180, { { 200, 7 }, { 384, 7 } }, { { -440, 6 }, { -392, 7 }, { -264, 6 } })
+grid("Craft", 134, 472, -512, -180, { { 200, 10 }, { 384, 10 } }, { { -440, 10 }, { -264, 10 } })
 -- South-central and south-east residential
-grid("Residential", -146, 316, 152, 300, { { -88, 6 }, { -44, 5 }, { 52, 5 }, { 108, 6 }, { 172, 7 }, { 238, 5 } }, { { 222, 6 } })
+grid("Residential", -146, 316, 152, 300, { { -60, 10 }, { 50, 10 }, { 160, 10 }, { 250, 10 } }, { { 225, 10 } })
 -- Harbour back streets
-grid("Harbor", 250, 318, -140, 300, {}, { { -70, 6 }, { 70, 6 }, { 140, 5 }, { 214, 6 } })
--- Slums: narrow alleys, small lots
-grid("Slum", -460, -152, 152, 300, { { -404, 4 }, { -352, 5 }, { -300, 4 }, { -220, 4 }, { -186, 4 } }, { { 194, 4 }, { 246, 5 } })
+grid("Harbor", 250, 318, -140, 300, {}, { { -70, 10 }, { 70, 10 }, { 140, 10 }, { 214, 10 } })
+-- Slums: narrower, crooked-feeling streets, but few of them
+grid("Slum", -460, -152, 152, 300, { { -390, 7 }, { -300, 7 }, { -220, 7 } }, { { 230, 7 } })
 
 --------------------------------------------------------------------------------------------------------------------
 -- Foot traffic, shops and deeds
@@ -645,8 +678,8 @@ local function trafficAt(x: number, z: number): number
 end
 
 -- Is there street enough in front of a building for a shop's counter (clear of every other building and the walls)?
-local function roomForCounter(entry: any): boolean
-	local strip = LayoutRules.frontStrip(entry, LayoutRules.SHOP_FRONTAGE)
+local function roomInFront(entry: any, depth: number): boolean
+	local strip = LayoutRules.frontStrip(entry, depth)
 	local inner = BOUNDS
 	local x0, x1, z0, z1 = LayoutRules.bounds(strip)
 	local wall = WALL_THICKNESS / 2
@@ -675,7 +708,9 @@ for _, entry in ipairs(blocks) do
 	local lot = entry.lot
 	if lot ~= nil then
 		entry.lot = nil
-		if roomForCounter(entry) and chance(0.06 + 0.6 * entry.traffic) then
+		-- room in front for a barrel, a bench or a flower box against the wall (CityBuilder.Outdoors)
+		entry.dressing = roomInFront(entry, 6)
+		if roomInFront(entry, LayoutRules.SHOP_FRONTAGE) and chance(0.02 + 0.4 * entry.traffic) then
 			entry.use = "Storefront"
 			entry.shopfront = true
 			entry.access = "Sale"
@@ -690,6 +725,10 @@ for _, entry in ipairs(blocks) do
 		elseif chance(lot.sale) then
 			entry.access = "Sale"
 			entry.propertyId = nextPropertyId(PROPERTY_PREFIX[lot.kind])
+		elseif lot.kind == "Slum" and chance(0.4) then
+			-- a ruin: a house fallen in, its walls broken and its roof gone
+			entry.use = "Ruin"
+			entry.access = "Npc"
 		else
 			entry.access = "Npc"
 		end
@@ -722,6 +761,17 @@ local layout: any = {
 	templates = TEMPLATES,
 	-- instanced interiors are built far above the map, one slot per house that someone is inside
 	interiors = { origin = { 3000, 800, -1500 }, spacing = 80, perRow = 16 },
+	-- signposts: on each small square, and where the main roads cross
+	signposts = (function(): {any}
+		local list = {}
+		for _, at in ipairs(SQUARES) do
+			table.insert(list, { at[1] + 7, at[2] + 7 })
+		end
+		for _, at in ipairs({ { -9, 145 }, { -290, -5.2 }, { 332, -6.2 }, { -10, -171 }, { 308, -171 } }) do
+			table.insert(list, at)
+		end
+		return list
+	end)(),
 	bounds = BOUNDS,
 	walls = { thickness = WALL_THICKNESS, height = 30, towerSpacing = TOWER_SPACING, towerSize = TOWER_SIZE },
 	wallTowers = WALL_TOWERS,

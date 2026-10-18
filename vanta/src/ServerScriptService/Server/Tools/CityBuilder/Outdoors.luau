@@ -68,6 +68,12 @@ local function corners(entry: any): CFrame
 	return CFrame.new(entry.center[1], 0, entry.center[2]) * CFrame.Angles(0, math.rad(entry.yaw or 0), 0)
 end
 
+-- The slums' ground (x0, x1, z0, z1): mud, and their streets are mud too.
+local SLUM_GROUND = { -466, -149, 149, 306 }
+local function inSlums(x: number, z: number): boolean
+	return x > SLUM_GROUND[1] and x < SLUM_GROUND[2] and z > SLUM_GROUND[3] and z < SLUM_GROUND[4]
+end
+
 --------------------------------------------------------------------------------------------------------------------
 -- Ground, roads, yards
 --------------------------------------------------------------------------------------------------------------------
@@ -79,11 +85,14 @@ function Outdoors.ground(layout: any, root: Instance, holes: {{number}})
 	local wz0, wz1 = water.center[2] - water.size[2] / 2, water.center[2] + water.size[2] / 2
 	-- meadows outside the walls (the forest brings its own ground)
 	slabs(folder, "Meadow", { { -760, wx0, -1120, b.maxZ + 14 }, { wx0, 760, -1120, wz0 } }, -0.25, 2, rgb(104, 140, 76), M.Grass)
-	-- the city's paving, open over the cellar stairs, stopping at the quay
-	local city = subtract({ b.minX - 6, wx0, b.minZ - 6, b.maxZ + 6 }, holes)
+	-- the city's ground: trodden earth between the streets (only the streets are paved), mud in the slums; open over the
+	-- cellar stairs, stopping at the quay
+	local slum = SLUM_GROUND
+	local city = subtract({ b.minX - 6, wx0, b.minZ - 6, b.maxZ + 6 }, { slum })
 	table.insert(city, { wx0, b.maxX + 6, b.minZ - 6, wz0 })
 	table.insert(city, { wx0, b.maxX + 6, wz1, b.maxZ + 6 })
-	slabs(folder, "Paving", city, 0, 2, rgb(150, 142, 128), M.Cobblestone)
+	slabs(folder, "Earth", city, 0, 2, rgb(128, 110, 84), Enum.Material.Ground)
+	slabs(folder, "Mud", subtract(slum, holes), 0, 2, rgb(92, 78, 60), Enum.Material.Mud)
 	-- the sea: terrain water where it can be made, a glassy surface otherwise
 	local sea = { wx0, wx0 + water.size[1], wz0, wz1 + 40 }
 	slabs(folder, "Seabed", { sea }, -water.depth, 2, rgb(150, 138, 110), M.Sand)
@@ -119,7 +128,45 @@ function Outdoors.roads(layout: any, root: Instance)
 		elseif zone.surface == "Garden" then
 			local bed = Kit.part(folder, zone.id, Vector3.new(zone.size[1], 0.4, zone.size[2]), corners(zone) * CFrame.new(0, 0.2, 0), rgb(96, 140, 70), M.Grass)
 			bed.CastShadow = false
+		elseif zone.surface == "Square" then
+			-- a small square: paved (trampled mud in the slums), a step above the streets that meet it
+			local slums = inSlums(zone.center[1], zone.center[2])
+			local square = Kit.part(folder, zone.id, Vector3.new(zone.size[1], 0.3, zone.size[2]), corners(zone) * CFrame.new(0, 0.12, 0), if slums then rgb(104, 88, 66) else rgb(196, 186, 166), if slums then Enum.Material.Ground else M.Pavement)
+			square.CastShadow = false
 		end
+	end
+	-- the streets themselves: cobbled main roads, flagstone streets, mud in the slums. Where two meet, one lies a few
+	-- hundredths of a stud higher and a little narrower than the other, so no two of their faces share a plane.
+	local levels = {}
+	for index, road in ipairs(layout.roads) do
+		local used = {}
+		for other = 1, index - 1 do
+			if LayoutRules.overlaps(road, layout.roads[other]) or LayoutRules.overlaps({ center = road.center, size = { road.size[1] + 0.2, road.size[2] + 0.2 }, yaw = road.yaw }, layout.roads[other]) then
+				used[levels[other]] = true
+			end
+		end
+		local level = 0
+		while used[level] do
+			level += 1
+		end
+		levels[index] = level
+	end
+	for index, road in ipairs(layout.roads) do
+		local level = levels[index]
+		local top = 0.04 + level * 0.03
+		local inset = 0.013 + level * 0.021
+		local color, material = rgb(150, 142, 128), M.Cobblestone
+		if road.width == "Street" or road.width == "Secondary" then
+			color, material = rgb(156, 150, 138), M.Pavement
+		elseif road.width == "Noble" then
+			color, material = rgb(190, 184, 170), M.Pavement
+		end
+		if inSlums(road.center[1], road.center[2]) then
+			color, material = rgb(84, 70, 54), Enum.Material.Mud
+		end
+		local bottom = 0.005 + level * 0.002
+		local strip = Kit.part(folder, road.id, Vector3.new(road.size[1] - 2 * inset, top - bottom, road.size[2] - 2 * inset), corners(road) * CFrame.new(0, (top + bottom) / 2, 0), color, material)
+		strip.CastShadow = false
 	end
 end
 
@@ -401,14 +448,27 @@ end
 function Outdoors.dressing(layout: any, root: Instance)
 	local folder = Kit.folder(root, "StreetDressing")
 	local f = WORLD:child(folder)
-	-- lanterns along the main roads, alternating sides
+	-- nothing big goes in front of a door
+	local function nearDoor(x: number, z: number): boolean
+		for _, entry in ipairs(layout.blocks) do
+			if entry.door ~= nil then
+				local step = LayoutRules.doorStep(entry)
+				if math.abs(step[1] - x) < 9 and math.abs(step[2] - z) < 9 then
+					return true
+				end
+			end
+		end
+		return false
+	end
+	-- lanterns along the main roads and the district streets, alternating sides
 	for _, road in ipairs(layout.roads) do
-		if (road.width == "Main" or road.width == "Noble") and (road.yaw or 0) == 0 and road.surface == nil then
+		if (road.width == "Main" or road.width == "Noble" or road.width == "Street") and (road.yaw or 0) == 0 and road.surface == nil and not inSlums(road.center[1], road.center[2]) then
 			local alongX = road.size[1] > road.size[2]
 			local length = if alongX then road.size[1] else road.size[2]
-			local count = math.floor(length / 64)
+			local every = if road.width == "Street" then 120 else 64
+			local count = math.floor(length / every)
 			for index = 0, count - 1 do
-				local t = -length / 2 + 32 + index * 64
+				local t = -length / 2 + every / 2 + index * every
 				local side = if index % 2 == 0 then 1 else -1
 				local half = (if alongX then road.size[2] else road.size[1]) / 2 - 0.8
 				if alongX then
@@ -429,7 +489,7 @@ function Outdoors.dressing(layout: any, root: Instance)
 			end
 		elseif zone.id == "FineryStall" then
 			stall(f, zone.center[1], zone.center[2], 0, rgb(110, 60, 120), Furniture.goods.Tailor)
-		elseif zone.surface == "Yard" and zone.district ~= nil and zone.size[1] * zone.size[2] > 160 then
+		elseif zone.surface == "Yard" and zone.district ~= nil and zone.size[1] * zone.size[2] > 160 and not nearDoor(zone.center[1], zone.center[2]) then
 			-- courtyards: a well or a woodpile and a cart
 			local cx, cz = zone.center[1], zone.center[2]
 			local seed = math.floor(math.abs(cx * 7 + cz * 13)) % 3
@@ -477,6 +537,59 @@ function Outdoors.dressing(layout: any, root: Instance)
 				tf:box("TroughWater", Vector3.new(5.4, 0.1, 1.8), 0, 1.9, 0, rgb(60, 100, 120), M.Glass, NO)
 			end
 			cart(f, gate.center[1] - 20, gate.center[2] + inward * 24, 0)
+		end
+	end
+	-- the small squares: a well or a tree in the middle, benches, a lantern
+	for _, zone in ipairs(layout.ground) do
+		if zone.surface == "Square" then
+			local cx, cz = zone.center[1], zone.center[2]
+			if inSlums(cx, cz) then
+				well(f, cx, cz)
+			elseif math.floor(math.abs(cx + cz)) % 2 == 0 then
+				well(f, cx, cz)
+			else
+				f:box("TreeBed", Vector3.new(6, 0.8, 6), cx, 0.4, cz, rgb(150, 146, 136), M.Cobblestone)
+				f:cyl("TreeTrunk", 9, 1.4, cx, 0.8, cz, rgb(100, 72, 48), M.Wood)
+				f:box("TreeCrown", Vector3.new(9, 7, 9), cx, 11.5, cz, rgb(70, 120, 60), M.Grass, NO).Shape = Enum.PartType.Ball
+			end
+			for _, s in ipairs({ -1, 1 }) do
+				local g = Furniture.at(f, cx + s * 7, 0.27, cz - 7, if s == 1 then 0 else 0)
+				if g ~= nil then
+					Furniture.bench(g, 4)
+				end
+			end
+			if not inSlums(cx, cz) then
+				lantern(folder, cx - 7, cz + 7)
+			end
+		end
+	end
+	-- signposts pointing to the nearest places worth finding
+	local places = {
+		{ "Merchant Square", 0, 0 }, { "Castle", 0, -334 }, { "Harbour", 360, 0 }, { "South Gate", 0, 320 },
+		{ "North Gate", 300, -520 }, { "Slums", -300, 225 }, { "Church", -120, -128 }, { "Craftsmen", 300, -300 },
+		{ "Old Town", -300, -40 }, { "Noble Quarter", -300, -340 },
+	}
+	for _, at in ipairs(layout.signposts or {}) do
+		local x, z = at[1], at[2]
+		local sorted = {}
+		for _, place in ipairs(places) do
+			local d = math.sqrt((place[2] - x) ^ 2 + (place[3] - z) ^ 2)
+			if d > 50 then
+				table.insert(sorted, { place = place, d = d })
+			end
+		end
+		table.sort(sorted, function(a, c)
+			return a.d < c.d
+		end)
+		local pf = Kit.frame(folder, CFrame.new(x, 0, z))
+		pf:box("Signpost", Vector3.new(0.5, 9, 0.5), 0, 4.5, 0, C.darkWood, M.Wood)
+		for k = 1, math.min(3, #sorted) do
+			local place = sorted[k].place
+			local yaw = math.atan2(place[2] - x, place[3] - z)
+			-- an arm pointing along the way, the name on both faces
+			local arm = pf:boxAt("SignArm", Vector3.new(0.2, 0.9, 4.4), CFrame.new(0, 8.6 - k * 1.15, 0) * CFrame.Angles(0, yaw, 0) * CFrame.new(0, 0, 2.45), rgb(110, 80, 52), M.WoodPlanks, NO)
+			Kit.sign(arm, Enum.NormalId.Left, place[1], rgb(240, 226, 190))
+			Kit.sign(arm, Enum.NormalId.Right, place[1], rgb(240, 226, 190))
 		end
 	end
 	-- street name posts at the main junctions

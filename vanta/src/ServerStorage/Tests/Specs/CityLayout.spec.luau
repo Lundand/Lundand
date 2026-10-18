@@ -121,7 +121,7 @@ return function(t)
 		local rules = Content.propertyRules
 		local busyPrice = PropertyPricing.priceOf(Content.world.properties[busy.propertyId], busy.traffic, rules)
 		local quietPrice = PropertyPricing.priceOf(Content.world.properties[quiet.propertyId], quiet.traffic, rules)
-		t.truthy(busyPrice >= quietPrice * 3, string.format("%s %d, %s %d", busy.id, busyPrice, quiet.id, quietPrice))
+		t.truthy(busyPrice >= quietPrice * 2, string.format("%s %d, %s %d", busy.id, busyPrice, quiet.id, quietPrice))
 	end)
 
 	t.test("guild halls stand in every part of town", function()

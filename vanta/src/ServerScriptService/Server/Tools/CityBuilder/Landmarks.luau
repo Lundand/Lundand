@@ -214,9 +214,13 @@ function Landmarks.church(entry: any, parent: Instance): Model
 	for _, s in ipairs({ -1, 1 }) do
 		local candle = f:box("Candle", Vector3.new(0.5, 1.6, 0.5), s * 2.6, 6.2, -hd + T + 3, rgb(255, 220, 160), M.Neon, NO)
 		candle.CastShadow = false
-		Kit.light(candle, rgb(255, 210, 150), 18, 1)
+		-- one soft glow on the altar is enough; the other candle only glows
+		if s == 1 then
+			Kit.light(candle, rgb(255, 210, 150), 12, 0.5)
+		end
 	end
-	for row = 0, 5 do
+	-- pews in the front half of the nave; the rows by the great doors are left out so the way in stays open
+	for row = 0, 3 do
 		local z = 14 + row * 3
 		for _, s in ipairs({ -1, 1 }) do
 			put(f, s * 6.5, 0.6, z, 0, function(g)
@@ -243,7 +247,10 @@ function Landmarks.church(entry: any, parent: Instance): Model
 		local lamp = f:box("HangingLamp", Vector3.new(1.4, 1.4, 1.4), 0, naveTop - 8, z, rgb(255, 214, 150), M.Neon, NO)
 		lamp.CastShadow = false
 		f:box("LampChain", Vector3.new(0.15, 7.4, 0.15), 0, naveTop - 4, z, C.iron, M.Metal, NO)
-		Kit.light(lamp, rgb(255, 210, 150), 34, 1.2)
+		-- a dim church: two of the lamps give a little light, the others only glow
+		if index % 2 == 1 then
+			Kit.light(lamp, rgb(255, 210, 150), 24, 0.45)
+		end
 	end
 	lundandBanner(f, -nave + 1, 9, -hd + T + 0.2, 0)
 	lundandBanner(f, nave - 1, 9, -hd + T + 0.2, 0)

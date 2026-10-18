@@ -422,7 +422,11 @@ function CityBuilder.build(options: Options?): Model
 			byDistrict[district] = folder
 			local cf, W, D = Shell.frameOf(entry)
 			local model
-			if PUBLIC[entry.use] then
+			if entry.use == "Ruin" then
+				-- a house fallen in: no door, no roof
+				model = Kit.model(folder, entry.id)
+				Shell.ruin(model, cf, W, D, entry.style or "Slum", entry.seed or 1)
+			elseif PUBLIC[entry.use] then
 				-- a public building: a real ground-floor room behind an open doorway
 				model = Kit.model(folder, entry.id)
 				Kit.lightBudget = 1
@@ -474,6 +478,12 @@ function CityBuilder.build(options: Options?): Model
 				else
 					warn("[CityBuilder] house model for " .. entry.id .. " has no part named Door")
 				end
+			end
+			if entry.template ~= nil and entry.style == "Slum" and entry.use ~= "Ruin" then
+				Shell.weather(model, cf, W, D, entry.seed or 1)
+			end
+			if entry.dressing and not entry.shopfront and entry.use ~= "Ruin" and entry.use ~= "GuildHall" then
+				Shell.frontDressing(model, cf, W, D, entry.style or "Residential", entry.seed or 1)
 			end
 			if entry.shopfront and entry.propertyId ~= nil then
 				-- a player shop: an awning and a hanging sign on the street; its counter is inside

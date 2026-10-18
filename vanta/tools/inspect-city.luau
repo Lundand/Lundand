@@ -38,7 +38,7 @@ local doors = 0
 for _, entry in Layout.blocks do
 	local model = models[entry.id]
 	if model ~= nil and model:GetAttribute("Use") ~= nil then
-		if not CityBuilder.PUBLIC[entry.use] then
+		if not CityBuilder.PUBLIC[entry.use] and entry.use ~= "Ruin" then
 			local door = model:FindFirstChild("Door", true)
 			if door == nil or not door:HasTag("HouseDoor") then
 				problem(entry.id .. " has no tagged door")

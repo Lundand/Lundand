@@ -14,21 +14,22 @@ local function addProperties(prefix: string, kind: string, district: string, tie
 end
 -- homes: most ordinary houses in the capital can be bought (one home per player); everyone else can rent an inn room
 addProperties("NobleHouse", "House", "NobleQuarter", "Noble", 9)
-addProperties("TownHouse", "House", "Residential", "Townhouse", 93)
-addProperties("MarketHouse", "House", "MerchantSquare", "Townhouse", 17)
-addProperties("CraftHouse", "House", "CraftsmanQuarter", "Townhouse", 26)
-addProperties("HarborHouse", "House", "Harbor", "Townhouse", 2)
-addProperties("SlumHouse", "House", "Slums", "Modest", 25)
+addProperties("TownHouse", "House", "Residential", "Townhouse", 82)
+addProperties("MarketHouse", "House", "MerchantSquare", "Townhouse", 12)
+addProperties("CraftHouse", "House", "CraftsmanQuarter", "Townhouse", 24)
+addProperties("HarborHouse", "House", "Harbor", "Townhouse", 3)
+addProperties("SlumHouse", "House", "Slums", "Modest", 23)
 -- player shops (L-53, L-54) on streets all over town, most on the square and the main roads; one per player
 addProperties("Storefront", "Shop", "MerchantSquare", "Market", 6)
-addProperties("MarketShop", "Shop", "MerchantSquare", "Market", 19)
+addProperties("MarketShop", "Shop", "MerchantSquare", "Market", 11)
 addProperties("TownShop", "Shop", "Residential", "Market", 38)
-addProperties("CraftShop", "Shop", "CraftsmanQuarter", "Market", 4)
-addProperties("SlumShop", "Shop", "Slums", "Market", 7)
+addProperties("CraftShop", "Shop", "CraftsmanQuarter", "Market", 8)
+addProperties("SlumShop", "Shop", "Slums", "Market", 15)
 -- guild houses: smaller halls on ordinary streets, for guilds that want one sooner or cheaper
-addProperties("TownGuildHouse", "GuildHall", "Residential", "GuildHouse", 19)
-addProperties("MarketGuildHouse", "GuildHall", "MerchantSquare", "GuildHouse", 4)
-addProperties("CraftGuildHouse", "GuildHall", "CraftsmanQuarter", "GuildHouse", 9)
+addProperties("HarborGuildHouse", "GuildHall", "Harbor", "GuildHouse", 2)
+addProperties("TownGuildHouse", "GuildHall", "Residential", "GuildHouse", 17)
+addProperties("MarketGuildHouse", "GuildHall", "MerchantSquare", "GuildHouse", 5)
+addProperties("CraftGuildHouse", "GuildHall", "CraftsmanQuarter", "GuildHouse", 11)
 -- guild halls: one per guild, from guild level 5 (L-54), in the order CityLayout places them
 for index, district in ipairs({ "CraftsmanQuarter", "CraftsmanQuarter", "CraftsmanQuarter", "MerchantSquare", "Residential", "Residential", "Harbor", "Slums", "Residential", "MerchantSquare" }) do
 	local id = string.format("GuildHall%02d", index)
