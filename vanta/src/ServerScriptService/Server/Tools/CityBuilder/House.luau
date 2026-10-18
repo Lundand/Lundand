@@ -203,6 +203,42 @@ local function holeOf(p: Plan, k: number): Rect
 end
 House.holeOf = holeOf
 
+-- Space that must stay walkable, in the building's frame: { x0, x1, y0, y1, z0, z1, name }. The doorway and the
+-- first steps inside it, the foot of every flight, and the landing each flight arrives at.
+function House.clearances(p: Plan): {any}
+	local boxes = {}
+	local inset = if p.entry.use == "Apartments" then 2.6 else 4
+	table.insert(boxes, { p.doorX - p.doorWidth / 2 + 0.6, p.doorX + p.doorWidth / 2 - 0.6, 1.2, 7, p.D / 2 - WALL - inset, p.D / 2 + 0.5, "door" })
+	for k = 1, p.N - 1 do
+		local lane, zLow, zHigh = flightOf(p, k)
+		local y = p.floorTop(k - 1)
+		local up = p.floorTop(k)
+		local foot0, foot1 = if zLow > zHigh then zLow - 2 else zLow - 2.4, if zLow > zHigh then zLow + 2.4 else zLow + 2
+		table.insert(boxes, { lane[1] + 0.3, lane[2] - 0.3, y + 1.2, y + 4, foot0, foot1, "stair" })
+		local land0, land1 = if zHigh < zLow then zHigh - 2.4 else zHigh, if zHigh < zLow then zHigh else zHigh + 2.4
+		table.insert(boxes, { lane[1] + 0.3, lane[2] - 0.3, up + 0.4, up + 5, land0, land1, "landing" })
+	end
+	return boxes
+end
+
+-- Bounds of a part in a frame (its eight corners taken into the frame).
+local function boundsIn(frame: CFrame, part: BasePart): (Vector3, Vector3)
+	local cf, half = part.CFrame, part.Size / 2
+	local lo = Vector3.new(math.huge, math.huge, math.huge)
+	local hi = -lo
+	for _, x in ipairs({ -1, 1 }) do
+		for _, y in ipairs({ -1, 1 }) do
+			for _, z in ipairs({ -1, 1 }) do
+				local q = frame:PointToObjectSpace(cf:PointToWorldSpace(Vector3.new(x * half.X, y * half.Y, z * half.Z)))
+				lo = Vector3.new(math.min(lo.X, q.X), math.min(lo.Y, q.Y), math.min(lo.Z, q.Z))
+				hi = Vector3.new(math.max(hi.X, q.X), math.max(hi.Y, q.Y), math.max(hi.Z, q.Z))
+			end
+		end
+	end
+	return lo, hi
+end
+House.boundsIn = boundsIn
+
 --------------------------------------------------------------------------------------------------------------------
 -- Shell: walls with doors and windows, timber framing, slabs, stairs, roof
 --------------------------------------------------------------------------------------------------------------------
@@ -505,10 +541,33 @@ local function furnish(p: Plan, room: Room)
 	local kind = room.kind
 	local shopKind = p.entry.shop or "GeneralGoods"
 	local goods = Furniture.goods[shopKind] or Furniture.goods.GeneralGoods
+	local clear = House.clearances(p)
 	local function put(fn: (Frame) -> (), x: number, z: number, rot: number?)
 		local g = at(f, x, y, z, rot)
-		if g ~= nil then
-			fn(g)
+		if g == nil then
+			return
+		end
+		local before = #p.model:GetChildren()
+		fn(g)
+		-- a piece that would stand in a doorway or on the stairs is left out
+		local piece = {}
+		local children = p.model:GetChildren()
+		for index = before + 1, #children do
+			table.insert(piece, children[index])
+		end
+		for _, part in ipairs(piece) do
+			if part:IsA("BasePart") and part.CanCollide then
+				local lo, hi = boundsIn(f.cframe, part)
+				for _, b in ipairs(clear) do
+					if hi.X > b[1] and lo.X < b[2] and hi.Y > b[3] and lo.Y < b[4] and hi.Z > b[5] and lo.Z < b[6] then
+						for _, other in ipairs(piece) do
+							other:Destroy()
+						end
+						Kit.stats.parts -= #piece
+						return
+					end
+				end
+			end
 		end
 	end
 	local blanket = rng.pick(C.cloth)

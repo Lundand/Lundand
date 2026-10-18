@@ -311,12 +311,16 @@ function Landmarks.keep(entry: any, parent: Instance): Model
 		Kit.wall(f, "HallWall", false, s * hallX, -hd + T, hallFront, 0.6, UP - 1, 1.2, { { from = hallFront - 10, to = hallFront - 5, bottom = 0.6, top = 9 }, { from = -10, to = -5, bottom = 0.6, top = 9 } }, stone, M.Limestone)
 	end
 	Kit.wall(f, "HallFront", true, hallFront, -hallX, hallX, 0.6, UP - 1, 1.2, { { from = -5, to = 5, bottom = 0.6, top = 14 } }, stone, M.Limestone)
-	-- side rooms: guard room (left front), administrative chamber (right front), stores (both back)
+	-- the grand stairs run the length of the left wing against its outer wall
+	local stairX0, stairX1 = -hw + T, -hw + T + 5
+	-- side rooms: guard room (left front), administrative chamber (right front), stores (both back); the left
+	-- wing's dividing wall stops at the stairs
 	for _, s in ipairs({ -1, 1 }) do
-		Kit.wall(f, "RoomWall", true, -6, s * (hallX + 0.6), s * (hw - T), 0.6, UP - 1, 1, { { from = s * (hallX + 0.6) + (if s == 1 then 3 else -7), to = s * (hallX + 0.6) + (if s == 1 then 7 else -3), bottom = 0.6, top = 9 } }, stone, M.Limestone)
+		local outer = if s == 1 then hw - T else stairX1
+		local inner = s * (hallX + 0.6)
+		Kit.wall(f, "RoomWall", true, -6, math.min(inner, outer), math.max(inner, outer), 0.6, UP - 1, 1, { { from = s * (hallX + 0.6) + (if s == 1 then 3 else -7), to = s * (hallX + 0.6) + (if s == 1 then 7 else -3), bottom = 0.6, top = 9 } }, stone, M.Limestone)
 	end
 	-- upper floor slab over the side wings and the entrance hall, with the stairwell hole on the left
-	local stairX0, stairX1 = -hw + T, -hw + T + 5
 	local zLow, zHigh = hd - T - 3, -hd + T + 3
 	local run = zHigh - zLow
 	local cut = zLow + run * 0.25
@@ -332,7 +336,7 @@ function Landmarks.keep(entry: any, parent: Instance): Model
 	f:box("GalleryRail", Vector3.new(hallX * 2, 3.4, 0.4), 0, UP + 1.7, hallFront, C.darkWood, M.Wood)
 	-- the upper floor's rooms: council chamber (left), royal apartments (right), divided along z = -4
 	for _, s in ipairs({ -1, 1 }) do
-		Kit.wall(f, "UpperRoomWall", true, -4, s * (hallX + 0.4), s * (hw - T), UP, wallTop - 10, 1, { { from = s * (hallX + 0.4) + (if s == 1 then 3 else -7), to = s * (hallX + 0.4) + (if s == 1 then 7 else -3), bottom = UP, top = UP + 8.4 } }, stone, M.Limestone)
+		Kit.wall(f, "UpperRoomWall", true, -4, math.min(s * (hallX + 0.4), s * (hw - T)), math.max(s * (hallX + 0.4), s * (hw - T)), UP, wallTop - 10, 1, { { from = s * (hallX + 0.4) + (if s == 1 then 3 else -7), to = s * (hallX + 0.4) + (if s == 1 then 7 else -3), bottom = UP, top = UP + 8.4 } }, stone, M.Limestone)
 	end
 	-- roof over the walls (flat leads behind the battlements) and the hall ceiling
 	f:box("Roof", Vector3.new(W - 2, 1, D - 2), 0, wallTop - 0.5, 0, rgb(90, 96, 110), M.Slate)
@@ -362,7 +366,7 @@ function Landmarks.keep(entry: any, parent: Instance): Model
 	end
 	lundandBanner(f, 0, 14, -hd + T + 0.2, 0, 1.4)
 	-- guard room, administrative chamber, stores, upstairs rooms
-	put(f, -hw + 6, 0.6, 6, 90, function(g)
+	put(f, -(hallX + hw) / 2 + 2, 0.6, hd - T - 1, 180, function(g)
 		Furniture.weaponRack(g)
 	end)
 	put(f, -(hallX + hw) / 2, 0.6, 2, 0, function(g)

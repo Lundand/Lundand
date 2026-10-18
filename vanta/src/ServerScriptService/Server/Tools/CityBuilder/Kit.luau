@@ -287,6 +287,9 @@ end
 export type Opening = { from: number, to: number, bottom: number, top: number }
 
 function Kit.wall(f: Frame, name: string, alongX: boolean, fixed: number, from: number, to: number, y0: number, y1: number, thickness: number, openings: {Opening}, color: Color3, material: Enum.Material, options: Options?)
+	if from > to then
+		from, to = to, from
+	end
 	table.sort(openings, function(a, b)
 		return a.from < b.from
 	end)
@@ -318,6 +321,9 @@ end
 -- so the wall is cut into full-height strips between columns plus the pieces between openings in each column.
 -- Openings with different runs must not overlap.
 function Kit.facade(f: Frame, name: string, alongX: boolean, fixed: number, from: number, to: number, y0: number, y1: number, thickness: number, openings: {Opening}, color: Color3, material: Enum.Material)
+	if from > to then
+		from, to = to, from
+	end
 	local columns: {[string]: any} = {}
 	local sorted = {}
 	for _, o in ipairs(openings) do

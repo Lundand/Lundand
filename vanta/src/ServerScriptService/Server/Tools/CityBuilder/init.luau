@@ -118,7 +118,17 @@ function CityBuilder.build(options: Options?): Model
 	end
 	Furniture.setKeepClear(clearPoints)
 
+	-- the ground and the spawn go in first, so anyone joining while the rest is built lands on solid paving
 	Outdoors.ground(Layout, root, holes)
+	local spawn = Instance.new("SpawnLocation")
+	spawn.Name = "CitySpawn"
+	spawn.Anchored = true
+	spawn.Size = Vector3.new(8, 1, 8)
+	spawn.Transparency = 1
+	spawn.CanCollide = false
+	spawn.CFrame = CFrame.new(Layout.spawn.center[1], 0.6, Layout.spawn.center[2])
+	spawn.Parent = places
+	root.Parent = parent
 	Outdoors.roads(Layout, root)
 	Outdoors.walls(Layout, root)
 
@@ -167,7 +177,7 @@ function CityBuilder.build(options: Options?): Model
 			-- an interactive object such as the Heart of Realms: an invisible anchor for its prompt
 			body.Transparency = 1
 			body.CanCollide = false
-			body.Position = Vector3.new(placement.at[1], 6, placement.at[2])
+			body.CFrame = CFrame.new(placement.at[1], 6, placement.at[2])
 		end
 		body:AddTag("Npc")
 	end
@@ -195,14 +205,6 @@ function CityBuilder.build(options: Options?): Model
 			planning:AddTag("PlanningTable")
 		end
 	end
-	local spawn = Instance.new("SpawnLocation")
-	spawn.Name = "CitySpawn"
-	spawn.Anchored = true
-	spawn.Size = Vector3.new(8, 1, 8)
-	spawn.Transparency = 1
-	spawn.CanCollide = false
-	spawn.Position = Vector3.new(Layout.spawn.center[1], 0.6, Layout.spawn.center[2])
-	spawn.Parent = places
 
 	-- the road north towards the mountains, the mountains on the horizon, and the edges of the map
 	local outer = Kit.folder(root, "OuterRoad")
@@ -237,7 +239,6 @@ function CityBuilder.build(options: Options?): Model
 	root:SetAttribute("Parts", Kit.stats.parts)
 	root:SetAttribute("Lights", Kit.stats.lights)
 	root:SetAttribute("BuildSeconds", math.floor((os.clock() - started) * 100) / 100)
-	root.Parent = parent
 	Kit.setYield(0, nil)
 	print(string.format("[CityBuilder] built %d parts, %d lights in %.1fs", Kit.stats.parts, Kit.stats.lights, os.clock() - started))
 	return root
